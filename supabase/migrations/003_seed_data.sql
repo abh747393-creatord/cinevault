@@ -66,5 +66,5 @@ INSERT INTO content_sources (
   '1080p',
   'English',
   true,
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
+  'https://vjs.zencdn.net/v/oceans.mp4'
 );

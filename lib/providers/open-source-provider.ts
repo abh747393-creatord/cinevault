@@ -70,41 +70,63 @@ export class OpenSourceProvider implements ContentProvider {
     const item = SEED_CONTENT.find((c) => c.id === contentId || c.slug === contentId);
     if (!item) return [];
 
-    let streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+    let url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
+    let url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+    let url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
 
     if (item.contentType === 'tv' || item.contentType === 'anime') {
       if (item.seasons) {
         for (const s of item.seasons) {
           const ep = s.episodes.find((e) => e.id === episodeId);
           if (ep && ep.streamUrl) {
-            streamUrl = ep.streamUrl;
+            url1080 = ep.streamUrl;
+            url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+            url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
             break;
           }
         }
       }
     } else {
-      // Direct movie mapping
-      if (item.slug === 'big-buck-bunny') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      // Direct movie mapping with distinct working CDN URLs
+      if (item.slug === 'tears-of-steel') {
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else if (item.slug === 'sintel') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4';
+        url1080 = 'https://test-videos.co.uk/vids/sintel/mp4/h264/1080/Sintel_1080_10s_10MB.mp4';
+        url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+        url480 = 'https://test-videos.co.uk/vids/sintel/mp4/h264/720/Sintel_720_10s_5MB.mp4';
+      } else if (item.slug === 'big-buck-bunny') {
+        url1080 = 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4';
+        url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
+        url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
       } else if (item.slug === 'elephants-dream') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4';
+        url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
+        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
       } else if (item.slug === 'cosmos-laundromat') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_10MB.mp4';
+        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else if (item.slug === 'charge') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4';
+        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_5MB.mp4';
+        url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
+        url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
       } else if (item.slug === 'spring') {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
+        url1080 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
       } else {
-        streamUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       }
     }
 
     return [
       {
         id: `stream-${item.id}-1080p`,
-        url: streamUrl,
+        url: url1080,
         quality: '1080p',
         format: 'mp4',
         providerId: this.id,
@@ -118,21 +140,21 @@ export class OpenSourceProvider implements ContentProvider {
       },
       {
         id: `stream-${item.id}-720p`,
-        url: streamUrl,
+        url: url720,
         quality: '720p',
         format: 'mp4',
         providerId: this.id,
-        providerName: this.name,
+        providerName: 'High-Speed CDN Mirror',
         bitrate: 2200000,
         subtitles: SAMPLE_SUBTITLES,
       },
       {
         id: `stream-${item.id}-480p`,
-        url: streamUrl,
+        url: url480,
         quality: '480p',
         format: 'mp4',
         providerId: this.id,
-        providerName: this.name,
+        providerName: 'Standard CDN Mirror',
         bitrate: 1000000,
         subtitles: SAMPLE_SUBTITLES,
       },

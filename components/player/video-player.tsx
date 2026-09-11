@@ -295,12 +295,27 @@ export function VideoPlayer({
     setShowSettingsMenu(false);
   };
 
+  const handleVideoError = () => {
+    console.warn(`Current stream failed: ${currentStream?.url}`);
+    if (currentStreamIndex < streams.length - 1) {
+      const nextIdx = currentStreamIndex + 1;
+      console.info(`Auto-switching to fallback mirror index ${nextIdx}...`);
+      setCurrentStreamIndex(nextIdx);
+      setIsLoading(true);
+      setHasError(false);
+    } else {
+      setIsLoading(false);
+      setHasError(true);
+    }
+  };
+
   const handleQualityChange = (index: number) => {
     const video = videoRef.current;
-    if (!video) return;
-    const time = video.currentTime;
-    const playing = !video.paused;
+    const time = video?.currentTime || currentTime || 0;
+    const playing = !video?.paused;
     setCurrentStreamIndex(index);
+    setHasError(false);
+    setIsLoading(true);
     setShowSettingsMenu(false);
 
     // Maintain time position on quality switch
@@ -364,10 +379,7 @@ export function VideoPlayer({
             setIsPlaying(true);
           }}
           onPause={() => setIsPlaying(false)}
-          onError={() => {
-            setIsLoading(false);
-            setHasError(true);
-          }}
+          onError={handleVideoError}
           playsInline
         >
           {currentStream.subtitles?.map((sub: SubtitleTrack) => (
@@ -401,23 +413,58 @@ export function VideoPlayer({
 
       {/* Error Overlay */}
       {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-6 text-center z-30">
-          <AlertCircle className="w-12 h-12 text-accent mb-3 animate-bounce" />
-          <h3 className="text-xl font-bold text-white mb-1">Video Stream Unavailable</h3>
-          <p className="text-sm text-slate-400 max-w-md mb-4">
-            Could not stream media from current provider. Please try reloading or choose an alternative quality.
-          </p>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setHasError(false);
-              setIsLoading(true);
-              videoRef.current?.load();
-            }}
-          >
-            Retry Stream
-          </Button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-6 text-center z-30 space-y-4">
+          <AlertCircle className="w-12 h-12 text-accent animate-bounce" />
+          <div>
+            <h3 className="text-xl font-bold text-white mb-1">Stream Mirror Temporarily Unavailable</h3>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md">
+              Could not stream from current mirror. Switch to an alternative CDN mirror or quality below:
+            </p>
+          </div>
+
+          {/* Quick Quality / Mirror Selection */}
+          {streams.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-md">
+              {streams.map((s, idx) => (
+                <button
+                  key={s.id}
+                  onClick={() => handleQualityChange(idx)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    idx === currentStreamIndex
+                      ? 'bg-white/10 text-slate-400 border border-white/20'
+                      : 'bg-primary hover:bg-primary-hover text-white shadow-lg'
+                  }`}
+                >
+                  {s.quality} ({s.providerName || 'Mirror'})
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const nextIdx = (currentStreamIndex + 1) % (streams.length || 1);
+                handleQualityChange(nextIdx);
+              }}
+            >
+              Try Next Mirror
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setHasError(false);
+                setIsLoading(true);
+                videoRef.current?.load();
+              }}
+            >
+              Retry Stream
+            </Button>
+          </div>
         </div>
       )}
 
