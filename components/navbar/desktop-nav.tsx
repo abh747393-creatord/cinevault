@@ -65,21 +65,21 @@ export function DesktopNav() {
           : 'bg-gradient-to-b from-black/80 via-black/40 to-transparent'
       )}
     >
-      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-6">
+      <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 lg:gap-6">
         {/* Brand Logo & Navigation */}
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/25 group-hover:scale-105 transition-transform">
-              <Film className="w-5 h-5 text-white" />
+        <div className="flex items-center gap-5 xl:gap-8 min-w-0">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/25 group-hover:scale-105 transition-transform">
+              <Film className="w-4.5 h-4.5 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-extrabold tracking-wider bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+              <span className="text-xl xl:text-2xl font-extrabold tracking-wider bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                 CINE<span className="text-primary font-black">VAULT</span>
               </span>
             </div>
           </Link>
 
-          <nav className="flex items-center gap-1.5">
+          <nav className="flex items-center gap-1 xl:gap-1.5 shrink-0">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
@@ -87,9 +87,9 @@ export function DesktopNav() {
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    'px-3.5 py-1.5 text-sm font-medium rounded-lg transition-all',
+                    'px-2.5 xl:px-3.5 py-1.5 text-xs xl:text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-200',
                     isActive
-                      ? 'text-white bg-white/10 font-semibold shadow-inner'
+                      ? 'text-white bg-white/15 font-semibold shadow-inner'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   )}
                 >
@@ -101,15 +101,15 @@ export function DesktopNav() {
         </div>
 
         {/* Search, Notifications & User Menu */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 xl:gap-3 shrink-0">
           {/* Quick Search */}
           <form onSubmit={handleSearchSubmit} className="relative">
             <input
               type="text"
-              placeholder="Search titles, actors, genres..."
+              placeholder="Search titles, genres..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-56 lg:w-64 h-9 pl-9 pr-4 text-xs rounded-full bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:w-72 transition-all"
+              className="w-36 sm:w-44 xl:w-60 h-9 pl-9 pr-3 text-xs rounded-full bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:w-64 transition-all duration-300"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           </form>
@@ -246,14 +246,14 @@ export function DesktopNav() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Link href="/login">
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" className="whitespace-nowrap text-xs px-3">
                   Sign In
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button variant="primary" size="sm">
+                <Button variant="primary" size="sm" className="whitespace-nowrap text-xs px-3.5 shadow-lg shadow-primary/20">
                   Get Started
                 </Button>
               </Link>
