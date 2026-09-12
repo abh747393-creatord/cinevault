@@ -152,6 +152,23 @@ export default function MovieDetailsPage({ params }: { params: { slug: string } 
                 <Share2 className="w-5 h-5" />
                 Share
               </Button>
+
+              {movie.externalId && movie.externalId.startsWith('imdb-') && (
+                <a
+                  href={`https://www.imdb.com/title/${movie.externalId.replace('imdb-', '')}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button
+                    variant="glass"
+                    size="lg"
+                    className="flex items-center gap-2 px-5 text-amber-300 hover:text-amber-200 border-amber-500/30 hover:bg-amber-500/10"
+                  >
+                    <span className="font-black bg-amber-400 text-black px-1.5 py-0.5 rounded text-[10px] tracking-tighter">IMDb</span>
+                    View on IMDb
+                  </Button>
+                </a>
+              )}
             </div>
 
             {/* Production & Cast Metadata */}

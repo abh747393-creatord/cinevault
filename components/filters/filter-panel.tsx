@@ -21,7 +21,7 @@ export function FilterPanel({ genres, filters, onChange, className }: FilterPane
     { label: 'Alphabetical (A-Z)', value: 'alphabetical' },
   ] as const;
 
-  const years = [2024, 2023, 2022, 2021, 2020];
+  const years = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
 
   const handleGenreChange = (slug?: string) => {
     onChange({
