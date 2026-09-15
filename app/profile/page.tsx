@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { User, Clock, CheckCircle2, Bookmark, Settings, Shield, Film } from 'lucide-react';
+import { IconUser, IconClockCircle, IconCheckCircle, IconBookmark, IconSettings, IconShieldTick, IconClapperboardPlay } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,7 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center space-y-4">
-        <User className="w-16 h-16 text-slate-500 mx-auto" />
+        <IconUser className="w-16 h-16 text-slate-500 mx-auto" />
         <h2 className="text-xl font-bold text-white">Sign In to View Your Profile</h2>
         <p className="text-xs text-slate-400">
           Create an account or sign in to sync your watch progress, favorites, and preferences across devices.
@@ -68,7 +68,7 @@ export default function ProfilePage() {
             <div className="pt-3 flex flex-wrap items-center justify-center sm:justify-start gap-3">
               <Link href="/settings">
                 <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
-                  <Settings className="w-3.5 h-3.5" />
+                  <IconSettings className="w-3.5 h-3.5" />
                   Account Settings
                 </Button>
               </Link>
@@ -76,7 +76,7 @@ export default function ProfilePage() {
               {user.role === 'admin' && (
                 <Link href="/admin">
                   <Button variant="accent" size="sm" className="gap-1.5 text-xs">
-                    <Shield className="w-3.5 h-3.5" />
+                    <IconShieldTick className="w-3.5 h-3.5" />
                     Admin Panel
                   </Button>
                 </Link>
@@ -93,7 +93,7 @@ export default function ProfilePage() {
           <div className="p-5 rounded-2xl bg-card border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-xs font-semibold">Time Watched</span>
-              <Clock className="w-4 h-4 text-primary" />
+              <IconClockCircle className="w-4 h-4 text-primary" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-white">{hoursWatched} hrs</p>
             <p className="text-[11px] text-slate-500">Recorded viewing time</p>
@@ -102,7 +102,7 @@ export default function ProfilePage() {
           <div className="p-5 rounded-2xl bg-card border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-xs font-semibold">Titles Completed</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <IconCheckCircle className="w-4 h-4 text-emerald-400" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-white">{completedCount}</p>
             <p className="text-[11px] text-slate-500">Completed at least 90%</p>
@@ -111,7 +111,7 @@ export default function ProfilePage() {
           <div className="p-5 rounded-2xl bg-card border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-xs font-semibold">In Watchlist</span>
-              <Bookmark className="w-4 h-4 text-accent" />
+              <IconBookmark className="w-4 h-4 text-accent" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-white">{watchlist.length}</p>
             <p className="text-[11px] text-slate-500">Saved for later</p>
@@ -122,7 +122,7 @@ export default function ProfilePage() {
       {/* Genre Affinity & Viewing Analytics */}
       <div className="p-6 rounded-3xl bg-card border border-white/10 space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Film className="w-4 h-4 text-primary" />
+          <IconClapperboardPlay className="w-4 h-4 text-primary" />
           Genre Affinity & Watch Breakdown
         </h3>
         <div className="space-y-3 pt-2">
@@ -162,7 +162,7 @@ export default function ProfilePage() {
               Review and organize all {watchlist.length} saved titles
             </p>
           </div>
-          <Bookmark className="w-5 h-5 text-primary" />
+          <IconBookmark className="w-5 h-5 text-primary" />
         </Link>
 
         <Link
@@ -177,7 +177,7 @@ export default function ProfilePage() {
               Resume progress across {history.length} watched titles
             </p>
           </div>
-          <Clock className="w-5 h-5 text-primary" />
+          <IconClockCircle className="w-5 h-5 text-primary" />
         </Link>
       </div>
     </div>

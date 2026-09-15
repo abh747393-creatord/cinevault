@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play, Plus, Check, Star } from 'lucide-react';
+import { IconPlay, IconPlus, IconCheck, IconStar, IconBolt, IconStars } from '@/components/ui/icons';
 import { HeroBanner } from '@/components/hero/hero-banner';
 import { ContentRow } from '@/components/rows/content-row';
 import { ContinueWatchingRow } from '@/components/rows/continue-watching-row';
@@ -14,15 +14,83 @@ import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { ContentItem } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storage/local-storage-store';
+import { movieboxApi } from '@/lib/api/moviebox-client';
+
+// Client-side module-level cache to ensure instant zero-latency Home navigation
+let cachedLiveItems: ContentItem[] | null = null;
 
 export default function HomePage() {
   const [infoModalContent, setInfoModalContent] = useState<ContentItem | null>(null);
   const [inList, setInList] = useState(false);
+  const [liveItems, setLiveItems] = useState<ContentItem[]>(() => cachedLiveItems || []);
 
-  const featuredItems = SEED_CONTENT.filter((item) => item.featured);
-  const trendingItems = [...SEED_CONTENT].sort((a, b) => b.rating - a.rating);
-  const latestMovies = SEED_CONTENT.filter((item) => item.contentType === 'movie');
-  const latestTvShows = SEED_CONTENT.filter((item) => item.contentType === 'tv');
+  useEffect(() => {
+    let isMounted = true;
+    movieboxApi.homepage('all', 1).then((data) => {
+      if (!isMounted) return;
+      if (data && data.items && data.items.length > 0) {
+        const mapped: ContentItem[] = data.items.map((it) => ({
+          id: `mb-${it.id.value}`,
+          externalId: it.id.value,
+          title: it.title,
+          slug: `mb-${it.id.value}`,
+          contentType: it.media_type === 'series' ? 'tv' : 'movie',
+          posterUrl: it.poster_url || '',
+          backdropUrl: it.poster_url || '',
+          description: `${it.title} (${it.year || 'Latest'})`,
+          releaseDate: it.year ? `${it.year}-01-01` : '',
+          year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+          rating: data.metrics?.[it.id.value]?.rating || 8.0,
+          featured: false,
+          genres: [],
+          language: 'English',
+          status: 'released',
+        }));
+        cachedLiveItems = mapped;
+        setLiveItems(mapped);
+      }
+    }).catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const featuredItems = useMemo(() => {
+    const seedFeatured = SEED_CONTENT.filter((item) => item.featured);
+    if (liveItems.length > 0) {
+      const liveFeatured = liveItems.slice(0, 5).map((item) => ({ ...item, featured: true }));
+      return [...liveFeatured, ...seedFeatured];
+    }
+    return seedFeatured;
+  }, [liveItems]);
+
+  const trendingItems = useMemo(() => {
+    if (liveItems.length > 0) {
+      return [...liveItems, ...SEED_CONTENT];
+    }
+    return [...SEED_CONTENT].sort((a, b) => b.rating - a.rating);
+  }, [liveItems]);
+
+  const movieboxFeatured = useMemo(() => {
+    const seedMb = SEED_CONTENT.filter((c) => c.id.startsWith('mb-'));
+    if (liveItems.length > 0) {
+      return [...seedMb, ...liveItems];
+    }
+    return seedMb;
+  }, [liveItems]);
+
+  const latestMovies = useMemo(() => {
+    const liveMovies = liveItems.filter((i) => i.contentType === 'movie');
+    const seedMovies = SEED_CONTENT.filter((item) => item.contentType === 'movie');
+    return liveMovies.length > 0 ? [...liveMovies, ...seedMovies] : seedMovies;
+  }, [liveItems]);
+
+  const latestTvShows = useMemo(() => {
+    const liveTv = liveItems.filter((i) => i.contentType === 'tv');
+    const seedTv = SEED_CONTENT.filter((item) => item.contentType === 'tv');
+    return liveTv.length > 0 ? [...liveTv, ...seedTv] : seedTv;
+  }, [liveItems]);
+
   const popularAnime = SEED_CONTENT.filter((item) => item.contentType === 'anime');
   const actionItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'action'));
   const scifiItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'sci-fi'));
@@ -58,6 +126,41 @@ export default function HomePage() {
       <div className="space-y-6 md:space-y-8 -mt-6 sm:-mt-10 relative z-20">
         {/* Continue Watching Row (Only when items exist) */}
         <ContinueWatchingRow />
+
+        {/* CineVault VIP Quick Access Banner */}
+        <div className="mx-4 sm:mx-6 md:mx-12 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-950/70 via-purple-950/50 to-card border border-red-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center shadow-lg shadow-red-500/30 shrink-0">
+              <IconBolt className="w-5 h-5 text-white fill-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-black text-white">CineVault Ultra VIP Cinema</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Engine
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Stream 1080p, 4K, and Multi-Res releases directly from high-speed CDN mirrors with multi-language dubs.
+              </p>
+            </div>
+          </div>
+          <Link href="/moviebox" className="shrink-0 w-full sm:w-auto">
+            <Button variant="primary" size="sm" className="w-full bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold px-5 text-xs shadow-md shadow-red-500/20 flex items-center gap-1.5">
+              <IconStars className="w-3.5 h-3.5" />
+              Open VIP Cinema
+            </Button>
+          </Link>
+        </div>
+
+        {/* CineVault VIP Featured Streams */}
+        <ContentRow
+          title="⚡ CineVault VIP Catalog"
+          items={movieboxFeatured}
+          exploreHref="/moviebox"
+          onOpenInfo={handleOpenInfo}
+        />
 
         {/* Trending Now */}
         <ContentRow
@@ -155,7 +258,7 @@ export default function HomePage() {
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-slate-300 mt-1">
                   <Badge variant="rating" size="sm" className="flex items-center gap-1">
-                    <Star className="w-2.5 h-2.5 fill-amber-300" />
+                    <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
                     {infoModalContent.rating}
                   </Badge>
                   <span>{infoModalContent.year}</span>
@@ -175,7 +278,7 @@ export default function HomePage() {
                   }
                 >
                   <Button variant="primary" size="sm" className="flex items-center gap-1.5">
-                    <Play className="w-4 h-4 fill-white" />
+                    <IconPlay className="w-4 h-4 text-white" variant="Bold" />
                     Play
                   </Button>
                 </Link>
@@ -183,9 +286,11 @@ export default function HomePage() {
                   variant={inList ? 'accent' : 'glass'}
                   size="icon"
                   onClick={handleToggleWatchlist}
-                  className="h-9 w-9"
+                  className="h-9 w-9 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  aria-label={inList ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  title={inList ? 'Remove from Watchlist' : 'Add to Watchlist'}
                 >
-                  {inList ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {inList ? <IconCheck className="w-4 h-4" /> : <IconPlus className="w-4 h-4" />}
                 </Button>
               </div>
             </div>

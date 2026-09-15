@@ -87,71 +87,71 @@ export class OpenSourceProvider implements ContentProvider {
         }
       }
     } else {
-      // Direct movie mapping with distinct working CDN URLs
+      // Direct movie mapping with verified working public-domain & sample streams
       if (item.slug === 'tears-of-steel') {
         url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
-        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
-        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+        url720 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'sintel') {
-        url1080 = 'https://test-videos.co.uk/vids/sintel/mp4/h264/1080/Sintel_1080_10s_10MB.mp4';
+        url1080 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
         url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        url480 = 'https://test-videos.co.uk/vids/sintel/mp4/h264/720/Sintel_720_10s_5MB.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'big-buck-bunny') {
-        url1080 = 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4';
+        url1080 = 'https://dn710604.ca.archive.org/0/items/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
         url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
         url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
       } else if (item.slug === 'elephants-dream') {
-        url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
         url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
-        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'cosmos-laundromat') {
-        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_10MB.mp4';
-        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
         url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else if (item.slug === 'charge') {
-        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_5MB.mp4';
+        url1080 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
         url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
         url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
       } else if (item.slug === 'spring') {
-        url1080 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
-        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
-      } else if (item.slug === 'spiderman-brand-new-day') {
-        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_10MB.mp4';
+        url1080 = 'https://dn710604.ca.archive.org/0/items/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
         url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
         url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+      } else if (item.slug === 'spiderman-brand-new-day') {
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'the-odyssey') {
-        url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
-        url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
+        url1080 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
+        url720 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else if (item.slug === 'star-wars-the-mandalorian-and-grogu') {
-        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_5MB.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
         url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
-        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'the-whisper-man') {
-        url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
-        url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else if (item.slug === 'the-dog-stars') {
-        url1080 = 'https://test-videos.co.uk/vids/sintel/mp4/h264/1080/Sintel_1080_10s_10MB.mp4';
-        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://dn710604.ca.archive.org/0/items/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
         url480 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
       } else if (item.slug === 'mayday') {
-        url1080 = 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4';
-        url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
+        url1080 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
+        url720 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
         url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'coyote-vs-acme') {
-        url1080 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
-        url720 = 'https://www.w3schools.com/html/mov_bbb.mp4';
-        url480 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+        url1080 = 'https://dn710604.ca.archive.org/0/items/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
+        url720 = 'https://media.w3.org/2010/05/bunny/trailer.mp4';
+        url480 = 'https://vjs.zencdn.net/v/oceans.mp4';
       } else if (item.slug === 'the-runner') {
-        url1080 = 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_10MB.mp4';
-        url720 = 'https://vjs.zencdn.net/v/oceans.mp4';
+        url1080 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url720 = 'https://dn720709.ca.archive.org/0/items/Sintel/sintel-2048-surround.mp4';
         url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       } else {
-        url1080 = 'https://vjs.zencdn.net/v/oceans.mp4';
-        url720 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
-        url480 = 'https://www.w3schools.com/html/mov_bbb.mp4';
+        url1080 = 'https://dn710604.ca.archive.org/0/items/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4';
+        url720 = 'https://dn710301.ca.archive.org/0/items/Tears-of-Steel/tears_of_steel_720p.mp4';
+        url480 = 'https://media.w3.org/2010/05/sintel/trailer.mp4';
       }
     }
 

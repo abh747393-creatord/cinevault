@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { IconPlayCircle, IconChevronLeft, IconChevronRight } from '@/components/ui/icons';
 import { WatchHistoryItem } from '@/types/user';
 import { getStoredHistory } from '@/lib/storage/local-storage-store';
 import { ContinueWatchingCard } from '@/components/cards/continue-watching-card';
@@ -42,7 +42,7 @@ export function ContinueWatchingRow() {
     <section className="relative py-4 group select-none">
       <div className="flex items-center justify-between px-4 sm:px-6 md:px-12 mb-3">
         <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
-          <PlayCircle className="w-5 h-5 text-primary" />
+          <IconPlayCircle className="w-5 h-5 text-primary" />
           Continue Watching
         </h3>
         <Link
@@ -55,11 +55,13 @@ export function ContinueWatchingRow() {
 
       <div className="relative">
         <button
+          type="button"
           onClick={() => scroll('left')}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md border border-white/10 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110"
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md border border-white/10 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           aria-label="Scroll left"
+          title="Scroll left"
         >
-          <ChevronLeft className="w-6 h-6" />
+          <IconChevronLeft className="w-6 h-6" />
         </button>
 
         <div
@@ -77,11 +79,13 @@ export function ContinueWatchingRow() {
         </div>
 
         <button
+          type="button"
           onClick={() => scroll('right')}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md border border-white/10 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110"
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md border border-white/10 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           aria-label="Scroll right"
+          title="Scroll right"
         >
-          <ChevronRight className="w-6 h-6" />
+          <IconChevronRight className="w-6 h-6" />
         </button>
       </div>
     </section>

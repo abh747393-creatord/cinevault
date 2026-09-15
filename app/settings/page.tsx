@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Check, Shield, Globe, Subtitles, Monitor, Play } from 'lucide-react';
+import { IconSettings as SettingsIcon, IconCheck, IconShieldTick, IconGlobal, IconSubtitle, IconMonitor, IconPlay } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { UserRole } from '@/types/user';
@@ -49,7 +49,7 @@ export default function SettingsPage() {
         {/* Playback & Quality */}
         <div className="p-6 rounded-2xl bg-card border border-white/10 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Monitor className="w-4 h-4 text-primary" />
+            <IconMonitor className="w-4 h-4 text-primary" />
             Video Playback & Quality
           </h3>
 
@@ -89,7 +89,7 @@ export default function SettingsPage() {
         {/* Audio & Subtitles */}
         <div className="p-6 rounded-2xl bg-card border border-white/10 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Globe className="w-4 h-4 text-accent" />
+            <IconGlobal className="w-4 h-4 text-accent" />
             Language & Subtitles
           </h3>
 
@@ -132,7 +132,7 @@ export default function SettingsPage() {
         {/* Role & Permissions (Demo Mode) */}
         <div className="p-6 rounded-2xl bg-card border border-white/10 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400" />
+            <IconShieldTick className="w-4 h-4 text-emerald-400" />
             Account Role & Privileges
           </h3>
 
@@ -170,7 +170,7 @@ export default function SettingsPage() {
             size="md"
             className="flex items-center gap-2 px-6"
           >
-            {saved ? <Check className="w-4 h-4 text-emerald-400" /> : null}
+            {saved ? <IconCheck className="w-4 h-4 text-emerald-400" /> : null}
             {saved ? 'Preferences Saved' : 'Save Changes'}
           </Button>
         </div>

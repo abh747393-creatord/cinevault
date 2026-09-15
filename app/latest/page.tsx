@@ -1,30 +1,98 @@
 'use client';
 
-import React from 'react';
-import { Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { IconClockCircle } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { SEED_CONTENT } from '@/lib/data/catalog-seed';
+import { ContentItem } from '@/types/content';
 
 export default function LatestPage() {
-  const latest = [...SEED_CONTENT].sort((a, b) => b.year - a.year || new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime());
+  const [liveLatest, setLiveLatest] = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
+      movieboxApi
+        .homepage('movie', 1)
+        .then((data) => {
+          if (!isMounted) return;
+          if (data && data.items && data.items.length > 0) {
+            const mapped: ContentItem[] = data.items.map((it) => ({
+              id: `mb-${it.id.value}`,
+              externalId: it.id.value,
+              title: it.title,
+              slug: `mb-${it.id.value}`,
+              contentType: it.media_type === 'series' ? 'tv' : 'movie',
+              posterUrl: it.poster_url || '',
+              backdropUrl: it.poster_url || '',
+              description: `${it.title} (${it.year || '2026 Latest Release'}) - CineVault Stream`,
+              releaseDate: it.year ? `${it.year}-01-01` : '2026-01-01',
+              year: it.year ? parseInt(it.year, 10) || 2026 : 2026,
+              rating: data.metrics?.[it.id.value]?.rating || 8.5,
+              genres: [{ id: 'g-vip', name: 'VIP Cinema', slug: 'vip' }],
+              language: 'English',
+              status: 'released',
+            }));
+            setLiveLatest(mapped);
+          }
+          setLoading(false);
+        })
+        .catch(() => {
+          if (isMounted) setLoading(false);
+        });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const combinedLatest = useMemo(() => {
+    const seedSorted = [...SEED_CONTENT].sort(
+      (a, b) =>
+        b.year - a.year ||
+        new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime()
+    );
+    if (liveLatest.length > 0) {
+      return [...liveLatest, ...seedSorted];
+    }
+    return seedSorted;
+  }, [liveLatest]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-8 sm:py-12 space-y-8">
-      <div className="border-b border-white/10 pb-6">
-        <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-          <Clock className="w-7 h-7 text-primary" />
-          Latest Releases
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400 mt-1">
-          Recently added cinema productions, anime episodes, and streaming releases.
-        </p>
+      <div className="border-b border-white/10 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+            <IconClockCircle className="w-7 h-7 text-primary" />
+            Latest Releases
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+            Live auto-updating catalog of recently premiered movies, cinema releases, and episodes.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Updated Daily ({combinedLatest.length} Titles)
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-        {latest.map((item) => (
-          <ContentCard key={item.id} content={item} className="w-full" />
-        ))}
-      </div>
+      {loading && liveLatest.length === 0 ? (
+        <div className="py-24 flex flex-col items-center justify-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-xs font-medium">Fetching latest stream releases...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+          {combinedLatest.map((item) => (
+            <ContentCard key={item.id} content={item} className="w-full" />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

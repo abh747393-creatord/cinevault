@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play, X } from 'lucide-react';
+import { IconPlay, IconClose } from '@/components/ui/icons';
 import { WatchHistoryItem } from '@/types/user';
 import { calculateProgressPercentage, formatSeconds } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ export function ContinueWatchingCard({ item, onRemove }: ContinueWatchingCardPro
 
   return (
     <div className="group relative flex-shrink-0 w-64 sm:w-72 md:w-80 select-none">
-      <Link href={watchUrl} className="block w-full">
+      <Link href={watchUrl} prefetch={false} className="block w-full">
         <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-card border border-white/10 shadow-lg group-hover:border-primary/50 group-hover:scale-[1.02] transition-all duration-300">
           <Image
             src={imageSrc}
@@ -38,22 +38,24 @@ export function ContinueWatchingCard({ item, onRemove }: ContinueWatchingCardPro
           {/* Dark Overlay with Play Icon */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-center justify-center">
             <div className="w-12 h-12 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-lg shadow-primary/40 group-hover:scale-110 transition-transform">
-              <Play className="w-5 h-5 fill-white ml-0.5" />
+              <IconPlay className="w-5 h-5 text-white ml-0.5" variant="Bold" />
             </div>
           </div>
 
           {/* Dismiss button */}
           {onRemove && (
             <button
+              type="button"
+              aria-label="Remove from history"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onRemove(content.id);
               }}
-              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-slate-400 hover:text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-slate-400 hover:text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title="Remove from history"
             >
-              <X className="w-4 h-4" />
+              <IconClose className="w-4 h-4" />
             </button>
           )}
 

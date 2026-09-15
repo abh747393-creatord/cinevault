@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Tv, SlidersHorizontal, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { IconTV, IconSliderHorizontal, IconClose } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
-import { ContentFilterOptions } from '@/types/content';
+import { ContentFilterOptions, ContentItem } from '@/types/content';
+
+let cachedLiveTv: ContentItem[] | null = null;
 
 export default function TvShowsPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -16,9 +18,47 @@ export default function TvShowsPage() {
     sortBy: 'popular',
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveTv, setLiveTv] = useState<ContentItem[]>(() => cachedLiveTv || []);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (cachedLiveTv && cachedLiveTv.length > 0) return;
+
+    import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
+      movieboxApi.homepage('tv', 1).then((data) => {
+        if (!isMounted) return;
+        if (data && data.items && data.items.length > 0) {
+          const mapped: ContentItem[] = data.items
+            .filter((it) => it.media_type === 'series' || ((it.season_count ?? 0) > 0))
+            .map((it) => ({
+            id: `mb-${it.id.value}`,
+            externalId: it.id.value,
+            title: it.title,
+            slug: `mb-${it.id.value}`,
+            contentType: 'tv',
+            posterUrl: it.poster_url || '',
+            backdropUrl: it.poster_url || '',
+            description: `${it.title} (${it.year || 'Television Series'})`,
+            releaseDate: it.year ? `${it.year}-01-01` : '',
+            year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+            rating: data.metrics?.[it.id.value]?.rating || 8.0,
+            genres: [],
+            language: 'English',
+            status: 'ongoing',
+          }));
+          cachedLiveTv = mapped;
+          setLiveTv(mapped);
+        }
+      }).catch(() => {});
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredTv = useMemo(() => {
-    let list = SEED_CONTENT.filter((c) => c.contentType === 'tv');
+    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'tv');
+    let list = liveTv.length > 0 ? [...liveTv, ...seedList] : seedList;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -45,14 +85,14 @@ export default function TvShowsPage() {
     }
 
     return list;
-  }, [filters, searchQuery]);
+  }, [filters, searchQuery, liveTv]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-8 sm:py-12 space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-            <Tv className="w-7 h-7 text-primary" />
+            <IconTV className="w-7 h-7 text-primary" />
             TV Shows & Series
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -71,7 +111,7 @@ export default function TvShowsPage() {
             onClick={() => setShowMobileFilters(!showMobileFilters)}
             className="md:hidden flex items-center gap-2 whitespace-nowrap"
           >
-            <SlidersHorizontal className="w-4 h-4 text-primary" />
+            <IconSliderHorizontal className="w-4 h-4 text-primary" />
             Filters
           </Button>
         </div>
@@ -96,7 +136,7 @@ export default function TvShowsPage() {
                   size="icon"
                   onClick={() => setShowMobileFilters(false)}
                 >
-                  <X className="w-5 h-5" />
+                  <IconClose className="w-5 h-5" />
                 </Button>
               </div>
               <FilterPanel
@@ -124,7 +164,7 @@ export default function TvShowsPage() {
             </div>
           ) : (
             <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
-              <Tv className="w-12 h-12 text-slate-500 mx-auto" />
+              <IconTV className="w-12 h-12 text-slate-500 mx-auto" />
               <h3 className="text-base font-bold text-white">No TV shows found</h3>
               <p className="text-xs text-slate-400">
                 Try adjusting your search criteria.

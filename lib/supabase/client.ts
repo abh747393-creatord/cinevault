@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -10,9 +10,20 @@ export const isSupabaseConfigured = Boolean(
   !supabaseUrl.includes('your-project')
 );
 
-export function getBrowserClient() {
+let cachedBrowserClient: SupabaseClient | null = null;
+
+export function getBrowserClient(): SupabaseClient | null {
   if (!isSupabaseConfigured) {
     return null;
   }
-  return createSupabaseClient(supabaseUrl!, supabaseAnonKey!);
+  if (!cachedBrowserClient) {
+    cachedBrowserClient = createSupabaseClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+  return cachedBrowserClient;
 }

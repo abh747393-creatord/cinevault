@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Copy, Check, Share2, Send, MessageCircle } from 'lucide-react';
+import { IconCopy, IconCheck, IconShare, IconSend, IconWhatsapp } from '@/components/ui/icons';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { ContentItem } from '@/types/content';
@@ -67,8 +67,9 @@ export function ShareDialog({ isOpen, onClose, content }: ShareDialogProps) {
             size="sm"
             onClick={handleCopy}
             className="flex items-center gap-1.5 px-4 h-10"
+            aria-label={copied ? 'Link copied' : 'Copy link'}
           >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? <IconCheck className="w-4 h-4 text-emerald-400" /> : <IconCopy className="w-4 h-4" />}
             {copied ? 'Copied' : 'Copy'}
           </Button>
         </div>
@@ -77,10 +78,12 @@ export function ShareDialog({ isOpen, onClose, content }: ShareDialogProps) {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
           {typeof navigator !== 'undefined' && 'share' in navigator && (
             <button
+              type="button"
               onClick={handleNativeShare}
-              className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-white border border-white/5 transition-colors"
+              className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-white border border-white/5 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              aria-label="Device Share"
             >
-              <Share2 className="w-4 h-4 text-primary" />
+              <IconShare className="w-4 h-4 text-primary" />
               Device Share
             </button>
           )}
@@ -89,9 +92,10 @@ export function ShareDialog({ isOpen, onClose, content }: ShareDialogProps) {
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-semibold text-emerald-400 border border-emerald-500/20 transition-colors"
+            className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-semibold text-emerald-400 border border-emerald-500/20 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            aria-label="Share on WhatsApp"
           >
-            <MessageCircle className="w-4 h-4" />
+            <IconWhatsapp className="w-4 h-4" />
             WhatsApp
           </a>
 
@@ -99,9 +103,10 @@ export function ShareDialog({ isOpen, onClose, content }: ShareDialogProps) {
             href={telegramUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-400 border border-sky-500/20 transition-colors"
+            className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-400 border border-sky-500/20 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            aria-label="Share on Telegram"
           >
-            <Send className="w-4 h-4" />
+            <IconSend className="w-4 h-4" />
             Telegram
           </a>
 

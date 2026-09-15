@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Film, Lock, Mail, User, AlertCircle } from 'lucide-react';
+import { IconClapperboardPlay, IconLock, IconMail, IconUser, IconAlertCircle } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 
@@ -43,7 +43,7 @@ export default function SignupPage() {
         <div className="text-center space-y-2 relative z-10">
           <Link href="/" className="inline-flex items-center gap-2 mb-2">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center">
-              <Film className="w-5 h-5 text-white" />
+              <IconClapperboardPlay className="w-5 h-5 text-white" />
             </div>
             <span className="text-2xl font-black tracking-wider text-white">
               CINE<span className="text-primary">VAULT</span>
@@ -57,7 +57,7 @@ export default function SignupPage() {
 
         {error && (
           <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-400">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <IconAlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -68,7 +68,7 @@ export default function SignupPage() {
               Email Address
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <IconMail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="email"
                 required
@@ -85,7 +85,7 @@ export default function SignupPage() {
               Username
             </label>
             <div className="relative">
-              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <IconUser className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
                 required
@@ -116,7 +116,7 @@ export default function SignupPage() {
               Password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <IconLock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="password"
                 required

@@ -8,8 +8,9 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const episodeId = searchParams.get('episodeId') || undefined;
+    const dubId = searchParams.get('dubId') || undefined;
 
-    const streams = await providerResolver.resolveStreams(params.contentId, episodeId);
+    const streams = await providerResolver.resolveStreams(params.contentId, episodeId, dubId);
 
     if (!streams || streams.length === 0) {
       return NextResponse.json(

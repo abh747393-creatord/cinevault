@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Filter, RotateCcw } from 'lucide-react';
+import { IconFilter, IconRestart } from '@/components/ui/icons';
 import { Genre, ContentFilterOptions } from '@/types/content';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -59,16 +59,18 @@ export function FilterPanel({ genres, filters, onChange, className }: FilterPane
     <div className={cn('bg-card/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 sm:p-5 space-y-5', className)}>
       <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <h4 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-          <Filter className="w-4 h-4 text-primary" />
+          <IconFilter className="w-4 h-4 text-primary" />
           Filter & Sort
         </h4>
 
         {hasActiveFilters && (
           <button
+            type="button"
             onClick={handleReset}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded"
+            aria-label="Reset filters"
           >
-            <RotateCcw className="w-3 h-3" />
+            <IconRestart className="w-3 h-3" />
             Reset
           </button>
         )}

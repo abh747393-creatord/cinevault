@@ -23,49 +23,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const isSupabaseActive = isSupabaseConfigured;
 
-  useEffect(() => {
-    if (!isSupabaseActive) {
-      // Local demo mode
-      const stored = getStoredUser();
-      setUser(stored);
-      setLoading(false);
-      return;
-    }
-
+  const fetchUserProfile = useCallback(async (userId: string, email: string) => {
     const supabase = getBrowserClient();
     if (!supabase) {
       setUser(getStoredUser());
       setLoading(false);
       return;
     }
-
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchUserProfile(session.user.id, session.user.email || '');
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        fetchUserProfile(session.user.id, session.user.email || '');
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isSupabaseActive]);
-
-  const fetchUserProfile = async (userId: string, email: string) => {
-    const supabase = getBrowserClient();
-    if (!supabase) return;
 
     try {
       const { data, error } = await supabase
@@ -74,20 +38,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single();
 
-      if (data && !error) {
+      const profile = data as any;
+      if (profile && !error) {
         setUser({
-          id: data.id,
+          id: profile.id,
           email: email,
-          username: data.username || email.split('@')[0],
-          displayName: data.display_name || email.split('@')[0],
-          avatarUrl: data.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-          role: (data.role as UserRole) || 'user',
-          preferredLanguage: data.preferred_language || 'English',
-          preferredSubtitleLanguage: data.preferred_subtitle_language || 'English',
-          defaultQuality: data.default_quality || '1080p',
-          autoplayNext: data.autoplay_next ?? true,
-          theme: data.theme || 'dark',
-          createdAt: data.created_at || new Date().toISOString(),
+          username: profile.username || email.split('@')[0],
+          displayName: profile.display_name || email.split('@')[0],
+          avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+          role: (profile.role as UserRole) || 'user',
+          preferredLanguage: profile.preferred_language || 'English',
+          preferredSubtitleLanguage: profile.preferred_subtitle_language || 'English',
+          defaultQuality: profile.default_quality || '1080p',
+          autoplayNext: profile.autoplay_next ?? true,
+          theme: profile.theme || 'dark',
+          createdAt: profile.created_at || new Date().toISOString(),
         });
       } else {
         // Create initial profile record if not present
@@ -105,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           theme: 'dark',
           createdAt: new Date().toISOString(),
         };
-        await supabase.from('profiles').insert([
+        await (supabase.from('profiles') as any).insert([
           {
             id: userId,
             username: initialProfile.username,
@@ -120,9 +85,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const signIn = async (email: string, password?: string) => {
+  useEffect(() => {
+    if (!isSupabaseActive) {
+      // Local demo mode
+      const stored = getStoredUser();
+      setUser(stored);
+      setLoading(false);
+      return;
+    }
+
+    const supabase = getBrowserClient();
+    if (!supabase) {
+      setUser(getStoredUser());
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [isSupabaseActive, fetchUserProfile]);
+
+  const signIn = useCallback(async (email: string, password?: string) => {
     if (!isSupabaseActive) {
       const updated: UserProfile = {
         ...getStoredUser(),
@@ -147,9 +157,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: error.message };
     }
     return {};
-  };
+  }, [isSupabaseActive]);
 
-  const signUp = async (
+  const signUp = useCallback(async (
     email: string,
     username: string,
     displayName: string,
@@ -189,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) return { error: error.message };
     if (data.user) {
-      await supabase.from('profiles').insert([
+      await (supabase.from('profiles') as any).insert([
         {
           id: data.user.id,
           username,
@@ -199,17 +209,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
     }
     return {};
-  };
+  }, [isSupabaseActive]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (isSupabaseActive) {
       const supabase = getBrowserClient();
       if (supabase) await supabase.auth.signOut();
     }
     setUser(null);
-  };
+  }, [isSupabaseActive]);
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
+  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     if (!user) return;
     const updated = { ...user, ...updates };
     setUser(updated);
@@ -218,8 +228,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isSupabaseActive) {
       const supabase = getBrowserClient();
       if (supabase) {
-        await supabase
-          .from('profiles')
+        await (supabase
+          .from('profiles') as any)
           .update({
             display_name: updated.displayName,
             preferred_language: updated.preferredLanguage,
@@ -232,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('id', user.id);
       }
     }
-  };
+  }, [user, isSupabaseActive]);
 
   const switchRole = useCallback((role: UserRole) => {
     if (!user) return;
@@ -241,19 +251,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     saveStoredUser(updated);
   }, [user]);
 
+  const contextValue = React.useMemo(() => ({
+    user,
+    loading,
+    isSupabaseActive,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    switchRole,
+  }), [user, loading, isSupabaseActive, signIn, signUp, signOut, updateProfile, switchRole]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        isSupabaseActive,
-        signIn,
-        signUp,
-        signOut,
-        updateProfile,
-        switchRole,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

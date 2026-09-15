@@ -18,5 +18,5 @@ export interface ContentProvider {
 
   getEpisodes(contentId: string, seasonNumber?: number): Promise<Episode[]>;
 
-  getStreams(contentId: string, episodeId?: string): Promise<StreamSource[]>;
+  getStreams(contentId: string, episodeId?: string, dubId?: string): Promise<StreamSource[]>;
 }

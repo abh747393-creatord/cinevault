@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { IconClose } from '@/components/ui/icons';
 import { Button } from './button';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +58,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
             aria-label="Close dialog"
             className="rounded-full h-8 w-8 text-slate-400 hover:text-white"
           >
-            <X className="w-5 h-5" />
+            <IconClose className="w-5 h-5" />
           </Button>
         </div>
 

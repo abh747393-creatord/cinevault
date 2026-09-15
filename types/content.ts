@@ -1,4 +1,20 @@
-export type ContentType = 'movie' | 'tv' | 'anime';
+export type ContentType = 'movie' | 'tv' | 'anime' | 'drama';
+
+export interface FranchiseCollection {
+  id: string;
+  slug: string;
+  name: string;
+  category: 'movies' | 'anime' | 'dramas';
+  tagline: string;
+  description: string;
+  bannerUrl: string;
+  posterUrl: string;
+  itemCount: number;
+  featured?: boolean;
+  searchQueries: string[];
+  curatedTitles?: string[];
+  requiredKeywords?: string[];
+}
 
 export interface Genre {
   id: string;
@@ -53,7 +69,10 @@ export interface ContentItem {
   quality?: '4K' | '1080p' | '720p';
   availableAudio?: string[];
   availableSubtitles?: string[];
+  dubs?: { subject_id: string; language: string; label: string }[];
   seasons?: Season[];
+  trailerUrl?: string;
+  youtubeId?: string;
 }
 
 export interface ContentFilterOptions {

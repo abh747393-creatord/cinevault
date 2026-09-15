@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play, CheckCircle } from 'lucide-react';
+import { IconPlay, IconCheckCircle } from '@/components/ui/icons';
 import { Episode } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
 
@@ -33,7 +33,7 @@ export function EpisodeCard({ contentId, episode, isWatched = false }: EpisodeCa
 
         <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
           <div className="w-10 h-10 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-            <Play className="w-4 h-4 fill-white ml-0.5" />
+            <IconPlay className="w-4 h-4 text-white ml-0.5" variant="Bold" />
           </div>
         </div>
 
@@ -51,7 +51,7 @@ export function EpisodeCard({ contentId, episode, isWatched = false }: EpisodeCa
           </h4>
           {isWatched && (
             <span className="flex items-center gap-1 text-[11px] text-emerald-400 ml-auto">
-              <CheckCircle className="w-3.5 h-3.5" />
+              <IconCheckCircle className="w-3.5 h-3.5" />
               Watched
             </span>
           )}

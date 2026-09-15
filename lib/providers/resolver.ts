@@ -1,4 +1,5 @@
 import { ContentProvider } from './provider-interface';
+import { MovieBoxProvider } from './moviebox-provider';
 import { LocalDbProvider } from './local-db-provider';
 import { OpenSourceProvider } from './open-source-provider';
 import { TmdbAdapter } from './tmdb-adapter';
@@ -11,6 +12,7 @@ class ProviderResolver {
 
   constructor() {
     this.providers = [
+      new MovieBoxProvider(),
       new LocalDbProvider(),
       new OpenSourceProvider(),
       new TmdbAdapter(),
@@ -67,11 +69,11 @@ class ProviderResolver {
     return season?.episodes || [];
   }
 
-  async resolveStreams(contentId: string, episodeId?: string): Promise<StreamSource[]> {
+  async resolveStreams(contentId: string, episodeId?: string, dubId?: string): Promise<StreamSource[]> {
     for (const provider of this.providers) {
       if (!provider.enabled) continue;
       try {
-        const streams = await provider.getStreams(contentId, episodeId);
+        const streams = await provider.getStreams(contentId, episodeId, dubId);
         if (streams && streams.length > 0) return streams;
       } catch (err) {
         console.warn(`[Provider ${provider.slug}] getStreams failed:`, err);

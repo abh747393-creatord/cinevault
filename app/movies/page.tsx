@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Film, SlidersHorizontal, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { IconClapperboardPlay, IconSliderHorizontal, IconClose } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
-import { ContentFilterOptions } from '@/types/content';
+import { ContentFilterOptions, ContentItem } from '@/types/content';
+
+let cachedLiveMovies: ContentItem[] | null = null;
 
 export default function MoviesPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -16,9 +18,47 @@ export default function MoviesPage() {
     sortBy: 'popular',
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveMovies, setLiveMovies] = useState<ContentItem[]>(() => cachedLiveMovies || []);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (cachedLiveMovies && cachedLiveMovies.length > 0) return;
+
+    import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
+      movieboxApi.homepage('movie', 1).then((data) => {
+        if (!isMounted) return;
+        if (data && data.items && data.items.length > 0) {
+          const mapped: ContentItem[] = data.items
+            .filter((it) => it.media_type !== 'series')
+            .map((it) => ({
+            id: `mb-${it.id.value}`,
+            externalId: it.id.value,
+            title: it.title,
+            slug: `mb-${it.id.value}`,
+            contentType: 'movie',
+            posterUrl: it.poster_url || '',
+            backdropUrl: it.poster_url || '',
+            description: `${it.title} (${it.year || 'Feature Film'})`,
+            releaseDate: it.year ? `${it.year}-01-01` : '',
+            year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+            rating: data.metrics?.[it.id.value]?.rating || 8.0,
+            genres: [],
+            language: 'English',
+            status: 'released',
+          }));
+          cachedLiveMovies = mapped;
+          setLiveMovies(mapped);
+        }
+      }).catch(() => {});
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredMovies = useMemo(() => {
-    let list = SEED_CONTENT.filter((c) => c.contentType === 'movie');
+    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'movie');
+    let list = liveMovies.length > 0 ? [...liveMovies, ...seedList] : seedList;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -50,7 +90,7 @@ export default function MoviesPage() {
     }
 
     return list;
-  }, [filters, searchQuery]);
+  }, [filters, searchQuery, liveMovies]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-8 sm:py-12 space-y-8">
@@ -58,7 +98,7 @@ export default function MoviesPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-            <Film className="w-7 h-7 text-primary" />
+            <IconClapperboardPlay className="w-7 h-7 text-primary" />
             Movies Catalog
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -77,7 +117,7 @@ export default function MoviesPage() {
             onClick={() => setShowMobileFilters(!showMobileFilters)}
             className="md:hidden flex items-center gap-2 whitespace-nowrap"
           >
-            <SlidersHorizontal className="w-4 h-4 text-primary" />
+            <IconSliderHorizontal className="w-4 h-4 text-primary" />
             Filters
           </Button>
         </div>
@@ -105,7 +145,7 @@ export default function MoviesPage() {
                   size="icon"
                   onClick={() => setShowMobileFilters(false)}
                 >
-                  <X className="w-5 h-5" />
+                  <IconClose className="w-5 h-5" />
                 </Button>
               </div>
               <FilterPanel
@@ -134,7 +174,7 @@ export default function MoviesPage() {
             </div>
           ) : (
             <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
-              <Film className="w-12 h-12 text-slate-500 mx-auto" />
+              <IconClapperboardPlay className="w-12 h-12 text-slate-500 mx-auto" />
               <h3 className="text-base font-bold text-white">No movies match your filters</h3>
               <p className="text-xs text-slate-400">
                 Try resetting your genre or search criteria to discover more titles.

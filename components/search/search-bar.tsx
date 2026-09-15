@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X } from 'lucide-react';
+import { IconMagnifer, IconClose } from '@/components/ui/icons';
 
 interface SearchBarProps {
   initialQuery?: string;
@@ -39,7 +39,7 @@ export function SearchBar({ initialQuery = '', onSearch, className }: SearchBarP
   return (
     <form onSubmit={handleSubmit} className={`relative w-full ${className}`}>
       <div className="relative flex items-center">
-        <Search className="absolute left-4 w-5 h-5 text-slate-400 pointer-events-none" />
+        <IconMagnifer className="absolute left-4 w-5 h-5 text-slate-400 pointer-events-none" />
         <input
           type="text"
           value={query}
@@ -51,10 +51,10 @@ export function SearchBar({ initialQuery = '', onSearch, className }: SearchBarP
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-white"
+            className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-white focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             aria-label="Clear search"
           >
-            <X className="w-4 h-4" />
+            <IconClose className="w-4 h-4" />
           </button>
         )}
       </div>

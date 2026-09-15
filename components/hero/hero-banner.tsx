@@ -3,7 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play, Plus, Check, Info, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  IconPlay,
+  IconPlus,
+  IconCheck,
+  IconInfoCircle,
+  IconStar,
+  IconChevronLeft,
+  IconChevronRight,
+} from '@/components/ui/icons';
 import { ContentItem } from '@/types/content';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,22 +57,30 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
 
   const watchUrl = current.contentType === 'movie'
     ? `/watch/movie/${current.id}`
-    : `/watch/tv/${current.id}/ep-oc-101`;
+    : `/watch/tv/${current.id}/${current.seasons?.[0]?.episodes?.[0]?.id || 's1e1'}`;
 
   const detailUrl = current.contentType === 'movie'
     ? `/movie/${current.slug}`
     : `/tv/${current.slug}`;
+
+  const fallbackBackdrop = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80';
+  const [backdropSrc, setBackdropSrc] = useState(current.backdropUrl || fallbackBackdrop);
+
+  useEffect(() => {
+    setBackdropSrc(current.backdropUrl || fallbackBackdrop);
+  }, [current.backdropUrl]);
 
   return (
     <div className="relative w-full h-[70vh] sm:h-[75vh] lg:h-[85vh] min-h-[500px] max-h-[850px] overflow-hidden select-none">
       {/* Background Backdrop Image with smooth crossfade */}
       <div className="absolute inset-0 z-0">
         <Image
-          src={current.backdropUrl}
+          src={backdropSrc}
           alt={current.title}
           fill
           priority
           sizes="100vw"
+          onError={() => setBackdropSrc(fallbackBackdrop)}
           className="object-cover object-center filter brightness-[0.75] transition-all duration-1000 scale-100 group-hover:scale-105"
         />
 
@@ -82,7 +98,7 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
           </Badge>
 
           <Badge variant="rating" size="sm" className="flex items-center gap-1">
-            <Star className="w-3 h-3 fill-amber-300" />
+            <IconStar className="w-3 h-3 text-amber-300" variant="Bold" />
             {current.rating}
           </Badge>
 
@@ -133,8 +149,9 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
               variant="primary"
               size="lg"
               className="flex items-center gap-2 px-6 shadow-xl shadow-primary/30"
+              aria-label={`Watch ${current.title} Now`}
             >
-              <Play className="w-5 h-5 fill-white" />
+              <IconPlay className="w-5 h-5 text-white" variant="Bold" />
               Watch Now
             </Button>
           </Link>
@@ -144,15 +161,16 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
             size="lg"
             onClick={handleWatchlistToggle}
             className="flex items-center gap-2 px-5"
+            aria-label={inList ? 'Remove from My List' : 'Add to My List'}
           >
             {inList ? (
               <>
-                <Check className="w-5 h-5" />
+                <IconCheck className="w-5 h-5" />
                 In My List
               </>
             ) : (
               <>
-                <Plus className="w-5 h-5" />
+                <IconPlus className="w-5 h-5" />
                 Add to My List
               </>
             )}
@@ -163,8 +181,9 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
             size="lg"
             onClick={() => onOpenInfo ? onOpenInfo(current) : null}
             className="flex items-center gap-2 px-5"
+            aria-label="More Info"
           >
-            <Info className="w-5 h-5" />
+            <IconInfoCircle className="w-5 h-5" />
             More Info
           </Button>
         </div>
@@ -174,19 +193,21 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
       {featuredItems.length > 1 && (
         <div className="absolute bottom-6 right-4 sm:right-12 z-20 flex items-center gap-2">
           <button
+            type="button"
             onClick={() =>
               setCurrentIndex((prev) => (prev - 1 + featuredItems.length) % featuredItems.length)
             }
-            className="w-9 h-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 flex items-center justify-center transition-all"
+            className="w-9 h-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             aria-label="Previous featured title"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <IconChevronLeft className="w-5 h-5" />
           </button>
 
           <div className="flex items-center gap-1.5 px-2">
             {featuredItems.map((_, idx) => (
               <button
                 key={idx}
+                type="button"
                 onClick={() => setCurrentIndex(idx)}
                 className={`h-1.5 rounded-full transition-all ${
                   idx === currentIndex ? 'w-6 bg-primary' : 'w-2 bg-white/40'
@@ -197,13 +218,14 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
           </div>
 
           <button
+            type="button"
             onClick={() =>
               setCurrentIndex((prev) => (prev + 1) % featuredItems.length)
             }
-            className="w-9 h-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 flex items-center justify-center transition-all"
+            className="w-9 h-9 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             aria-label="Next featured title"
           >
-            <ChevronRight className="w-5 h-5" />
+            <IconChevronRight className="w-5 h-5" />
           </button>
         </div>
       )}

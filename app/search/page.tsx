@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Film, Tv, Sparkles, AlertCircle } from 'lucide-react';
+import { IconMagnifer, IconClapperboardPlay, IconTV, IconStars, IconAlertCircle } from '@/components/ui/icons';
 import { SearchBar } from '@/components/search/search-bar';
 import { ContentCard } from '@/components/cards/content-card';
 import { SEED_CONTENT } from '@/lib/data/catalog-seed';
-import { ContentType } from '@/types/content';
+import { ContentType, ContentItem } from '@/types/content';
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -20,11 +20,51 @@ function SearchContent() {
     }
   }, [queryParam]);
 
+  const [liveResults, setLiveResults] = useState<ContentItem[]>([]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setLiveResults([]);
+      return;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      import('@/lib/providers/resolver').then(({ providerResolver }) => {
+        providerResolver.globalSearch(q).then((results) => {
+          if (!isMounted) return;
+          const mapped: ContentItem[] = results.map((r) => ({
+            id: r.id,
+            title: r.title,
+            slug: r.id,
+            contentType: r.contentType,
+            posterUrl: r.posterUrl || '',
+            backdropUrl: r.posterUrl || '',
+            description: r.overview || '',
+            releaseDate: r.year ? `${r.year}-01-01` : '',
+            year: r.year || 2024,
+            rating: 7.8,
+            genres: [],
+            language: 'English',
+            status: 'released',
+          }));
+          setLiveResults(mapped);
+        }).catch(() => {});
+      });
+    }, 300);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
   const searchResults = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (!q) return [];
 
-    return SEED_CONTENT.filter((item) => {
+    const localMatches = SEED_CONTENT.filter((item) => {
       const matchesTitle = item.title.toLowerCase().includes(q);
       const matchesDesc = item.description.toLowerCase().includes(q);
       const matchesOrig = item.originalTitle?.toLowerCase().includes(q);
@@ -41,7 +81,19 @@ function SearchContent() {
         matchesDirector
       );
     });
-  }, [query]);
+
+    const combined = [...localMatches];
+    const seenTitles = new Set(localMatches.map((m) => m.title.toLowerCase()));
+
+    for (const r of liveResults) {
+      if (!seenTitles.has(r.title.toLowerCase())) {
+        seenTitles.add(r.title.toLowerCase());
+        combined.push(r);
+      }
+    }
+
+    return combined;
+  }, [query, liveResults]);
 
   const filteredResults = useMemo(() => {
     if (activeTab === 'all') return searchResults;
@@ -110,7 +162,7 @@ function SearchContent() {
                 : 'bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <Film className="w-3.5 h-3.5" />
+            <IconClapperboardPlay className="w-3.5 h-3.5" />
             Movies ({moviesCount})
           </button>
           <button
@@ -121,7 +173,7 @@ function SearchContent() {
                 : 'bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <Tv className="w-3.5 h-3.5" />
+            <IconTV className="w-3.5 h-3.5" />
             TV Shows ({tvCount})
           </button>
           <button
@@ -132,7 +184,7 @@ function SearchContent() {
                 : 'bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <IconStars className="w-3.5 h-3.5" />
             Anime ({animeCount})
           </button>
         </div>
@@ -148,7 +200,7 @@ function SearchContent() {
           </div>
         ) : (
           <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5 max-w-lg mx-auto">
-            <AlertCircle className="w-12 h-12 text-slate-500 mx-auto" />
+            <IconAlertCircle className="w-12 h-12 text-slate-500 mx-auto" />
             <h3 className="text-base font-bold text-white">
               No results found for &ldquo;{query}&rdquo;
             </h3>
@@ -160,7 +212,7 @@ function SearchContent() {
       ) : (
         /* Empty State */
         <div className="py-16 text-center space-y-2">
-          <Search className="w-12 h-12 text-slate-600 mx-auto" />
+          <IconMagnifer className="w-12 h-12 text-slate-600 mx-auto" />
           <p className="text-sm text-slate-400">Type above to search across our full streaming library.</p>
         </div>
       )}

@@ -19,9 +19,28 @@ export async function POST(request: NextRequest) {
       if (supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
+          const { toDeterministicUuid } = await import('@/lib/supabase/content-mapper');
+          const dbContentId = toDeterministicUuid(contentId);
+
+          // Ensure parent content record exists for foreign key constraint
+          await supabase.from('content').upsert({
+            id: dbContentId,
+            external_id: contentId,
+            content_type: episodeId ? 'tv' : 'movie',
+            title: contentId,
+            slug: contentId,
+            poster_url: '',
+            backdrop_url: '',
+            release_date: new Date().toISOString(),
+            year: new Date().getFullYear(),
+            rating: 7.5,
+            language: 'English',
+            status: 'released',
+          }, { onConflict: 'id', ignoreDuplicates: true });
+
           await supabase.from('watch_history').upsert({
             user_id: session.user.id,
-            content_id: contentId,
+            content_id: dbContentId,
             episode_id: episodeId || null,
             position_seconds: positionSeconds,
             duration_seconds: durationSeconds,

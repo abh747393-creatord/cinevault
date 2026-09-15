@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   WATCH_HISTORY: 'cinevault_watch_history',
   SETTINGS: 'cinevault_user_settings',
   ADMIN_ROLE: 'cinevault_admin_override',
+  FAVORITES: 'cinevault_favorites',
 };
 
 export const DEFAULT_USER: UserProfile = {
@@ -174,7 +175,10 @@ export function saveWatchProgress(
     id: existingIdx >= 0 ? current[existingIdx].id : `hist-${Date.now()}`,
     userId: user.id,
     contentId: content.id,
-    content,
+    content: {
+      ...content,
+      seasons: undefined,
+    },
     episodeId,
     episode,
     positionSeconds,
@@ -201,4 +205,36 @@ export function saveWatchProgress(
 export function clearHistory(): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEYS.WATCH_HISTORY, JSON.stringify([]));
+}
+
+export function getFavorites(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addToFavorites(contentId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  const current = getFavorites();
+  if (current.includes(contentId)) return current;
+  const updated = [contentId, ...current];
+  localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(updated));
+  return updated;
+}
+
+export function removeFromFavorites(contentId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  const current = getFavorites();
+  const updated = current.filter((id) => id !== contentId);
+  localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(updated));
+  return updated;
+}
+
+export function isFavorited(contentId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  return getFavorites().includes(contentId);
 }

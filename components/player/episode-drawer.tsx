@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { X, Play, CheckCircle } from 'lucide-react';
+import { IconClose, IconPlay } from '@/components/ui/icons';
 import { Season, Episode } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -42,9 +42,10 @@ export function EpisodeDrawer({
           variant="ghost"
           size="icon"
           onClick={onClose}
+          aria-label="Close episodes drawer"
           className="rounded-full h-8 w-8 text-slate-400 hover:text-white"
         >
-          <X className="w-5 h-5" />
+          <IconClose className="w-5 h-5" />
         </Button>
       </div>
 
@@ -54,8 +55,9 @@ export function EpisodeDrawer({
           {seasons.map((s) => (
             <button
               key={s.id}
+              type="button"
               onClick={() => setSelectedSeasonNumber(s.seasonNumber)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 selectedSeasonNumber === s.seasonNumber
                   ? 'bg-primary text-white shadow-md'
                   : 'bg-white/5 text-slate-400 hover:text-white'
@@ -93,14 +95,19 @@ export function EpisodeDrawer({
                   className="object-cover"
                 />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                  <Play className={`w-3.5 h-3.5 ${isCurrent ? 'fill-primary text-primary' : 'fill-white text-white'}`} />
+                  <IconPlay
+                    className={`w-3.5 h-3.5 ${isCurrent ? 'text-primary' : 'text-white'}`}
+                    variant="Bold"
+                  />
                 </div>
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-xs font-bold text-white truncate">
-                    {ep.episodeNumber}. {ep.title}
+                    {ep.title && (ep.title.toLowerCase().startsWith('chapter') || ep.title.toLowerCase().startsWith('episode'))
+                      ? ep.title
+                      : `${ep.episodeNumber}. ${ep.title}`}
                   </span>
                   {isCurrent && (
                     <span className="text-[10px] font-bold text-primary bg-primary/20 px-1.5 py-0.5 rounded">

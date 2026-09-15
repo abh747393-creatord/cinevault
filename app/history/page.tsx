@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Clock, Play, Trash2, CheckCircle2, ArrowRight } from 'lucide-react';
+import { IconClockCircle, IconPlay, IconTrash, IconCheckCircle, IconArrowRight } from '@/components/ui/icons';
 import { WatchHistoryItem } from '@/types/user';
 import { getStoredHistory, clearHistory } from '@/lib/storage/local-storage-store';
 import { calculateProgressPercentage, formatSeconds } from '@/lib/utils';
@@ -29,7 +29,7 @@ export default function HistoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-            <Clock className="w-7 h-7 text-primary" />
+            <IconClockCircle className="w-7 h-7 text-primary" />
             Watch History
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -44,7 +44,7 @@ export default function HistoryPage() {
             onClick={handleClear}
             className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20 flex items-center gap-2"
           >
-            <Trash2 className="w-4 h-4" />
+            <IconTrash className="w-4 h-4" />
             Clear All History
           </Button>
         )}
@@ -75,7 +75,7 @@ export default function HistoryPage() {
                       className="object-cover"
                     />
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/10 transition-colors">
-                      <Play className="w-5 h-5 fill-white" />
+                      <IconPlay className="w-5 h-5 text-white" variant="Bold" />
                     </div>
                     {/* Tiny bottom progress bar */}
                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
@@ -97,7 +97,7 @@ export default function HistoryPage() {
                       <span>{progress}% watched</span>
                       {item.completed && (
                         <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                          <CheckCircle2 className="w-3 h-3" /> Completed
+                          <IconCheckCircle className="w-3 h-3" /> Completed
                         </span>
                       )}
                     </div>
@@ -108,7 +108,7 @@ export default function HistoryPage() {
                 <div className="flex items-center gap-2 self-end sm:self-center">
                   <Link href={watchUrl}>
                     <Button variant="primary" size="sm" className="flex items-center gap-1.5 px-4 text-xs">
-                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <IconPlay className="w-3.5 h-3.5 text-white" variant="Bold" />
                       {item.completed ? 'Watch Again' : 'Resume'}
                     </Button>
                   </Link>
@@ -119,7 +119,7 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="py-24 text-center space-y-4 bg-white/5 rounded-2xl border border-white/5 max-w-md mx-auto">
-          <Clock className="w-12 h-12 text-slate-500 mx-auto" />
+          <IconClockCircle className="w-12 h-12 text-slate-500 mx-auto" />
           <h3 className="text-base font-bold text-white">No viewing history yet</h3>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
             Your watched movies and TV episodes will automatically appear here with progress tracking.
@@ -127,7 +127,7 @@ export default function HistoryPage() {
           <Link href="/">
             <Button variant="primary" size="sm" className="gap-2">
               Start Streaming
-              <ArrowRight className="w-4 h-4" />
+              <IconArrowRight className="w-4 h-4" />
             </Button>
           </Link>
         </div>

@@ -1,3 +1,5 @@
+import { ContentType } from './content';
+
 export type StreamQuality = '4K' | '1080p' | '720p' | '480p' | '360p' | 'auto';
 export type StreamFormat = 'mp4' | 'hls' | 'webm';
 
@@ -34,7 +36,7 @@ export interface ProviderSearchResult {
   providerId: string;
   title: string;
   year?: number;
-  contentType: 'movie' | 'tv' | 'anime';
+  contentType: ContentType;
   posterUrl?: string;
   overview?: string;
 }
