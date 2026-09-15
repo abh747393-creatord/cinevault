@@ -1,4 +1,11 @@
-export const MOVIEBOX_API_BASE = process.env.NEXT_PUBLIC_MOVIEBOX_API_URL || 'http://localhost:8080/api/v1';
+export const RUST_API_BASE = (
+  process.env.NEXT_PUBLIC_RUST_API_URL ||
+  process.env.RUST_API_URL ||
+  process.env.NEXT_PUBLIC_MOVIEBOX_API_URL ||
+  'http://localhost:8080'
+).replace(/\/+$/, '');
+
+export const MOVIEBOX_API_BASE = `${RUST_API_BASE}/api/v1`;
 
 export interface MovieBoxCatalogItem {
   id: {
@@ -113,9 +120,29 @@ export class MovieBoxApiClient {
   }
 
   async health(): Promise<{ status: string; version: string; providers: string[] }> {
-    const res = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          status: data.status || 'ok',
+          version: data.version || '0.1.18',
+          providers: data.providers || ['moviebox', 'fourkhdhub', 'circleftp', 'dhakaflix', 'addons'],
+        };
+      }
+    } catch {}
+    try {
+      const res = await fetch(`${RUST_API_BASE}/health`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          status: data.status || 'healthy',
+          version: data.version || '0.1.18',
+          providers: ['moviebox', 'fourkhdhub', 'circleftp', 'dhakaflix', 'addons'],
+        };
+      }
+    } catch {}
+    throw new Error('Health check failed');
   }
 
   async suggest(query: string): Promise<string[]> {

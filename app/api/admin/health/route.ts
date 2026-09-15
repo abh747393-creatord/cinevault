@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/auth/admin-guard';
 import { getServerClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { RUST_API_BASE } from '@/lib/api/moviebox-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,14 @@ export async function GET(request: NextRequest) {
   let rustLatency: number | null = null;
   const rustStart = performance.now();
   try {
-    const rustRes = await fetch('http://localhost:8080/api/v1/health', {
+    let rustRes = await fetch(`${RUST_API_BASE}/health`, {
       signal: AbortSignal.timeout(2500),
     });
+    if (!rustRes.ok) {
+      rustRes = await fetch(`${RUST_API_BASE}/api/v1/health`, {
+        signal: AbortSignal.timeout(2500),
+      });
+    }
     if (rustRes.ok) {
       rustStatus = 'online';
       rustLatency = Math.round(performance.now() - rustStart);
@@ -62,9 +68,8 @@ export async function GET(request: NextRequest) {
       },
       rustBackend: {
         status: rustStatus,
-        port: 8080,
         latencyMs: rustLatency,
-        endpoint: 'http://localhost:8080/api/v1',
+        endpoint: `${RUST_API_BASE}/api/v1`,
       },
       supabase: {
         status: dbStatus,

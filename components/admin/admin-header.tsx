@@ -11,6 +11,7 @@ import {
   IconUser,
 } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth/auth-context';
+import { RUST_API_BASE } from '@/lib/api/moviebox-client';
 
 interface AdminHeaderProps {
   onMobileMenuToggle: () => void;
@@ -28,7 +29,7 @@ export function AdminHeader({ onMobileMenuToggle }: AdminHeaderProps) {
     setRustStatus('checking');
     const start = performance.now();
     try {
-      const res = await fetch('http://localhost:8080/api/v1/health', {
+      const res = await fetch(`${RUST_API_BASE}/health`, {
         signal: AbortSignal.timeout(3000),
       });
       const elapsed = Math.round(performance.now() - start);
@@ -36,8 +37,16 @@ export function AdminHeader({ onMobileMenuToggle }: AdminHeaderProps) {
         setRustStatus('online');
         setRustLatency(elapsed);
       } else {
-        setRustStatus('offline');
-        setRustLatency(null);
+        const fallback = await fetch(`${RUST_API_BASE}/api/v1/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (fallback.ok) {
+          setRustStatus('online');
+          setRustLatency(Math.round(performance.now() - start));
+        } else {
+          setRustStatus('offline');
+          setRustLatency(null);
+        }
       }
     } catch {
       setRustStatus('offline');

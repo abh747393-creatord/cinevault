@@ -21,6 +21,7 @@ import { AdminAreaChart, AdminBarChart } from '@/components/admin/admin-chart';
 import { AdminTable, Column } from '@/components/admin/admin-table';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { Button } from '@/components/ui/button';
+import { RUST_API_BASE } from '@/lib/api/moviebox-client';
 
 export default function AdminDashboardPage() {
   const [statsData, setStatsData] = useState<any>(null);
@@ -40,10 +41,13 @@ export default function AdminDashboardPage() {
 
   const fetchDashboardData = async () => {
     setRefreshing(true);
-    // Direct client ping to Rust daemon
+    // Direct client ping to Rust daemon using configured RUST_API_BASE
     const t0 = performance.now();
     try {
-      const r = await fetch('http://localhost:8080/api/v1/health', { signal: AbortSignal.timeout(2000) });
+      let r = await fetch(`${RUST_API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
+      if (!r.ok) {
+        r = await fetch(`${RUST_API_BASE}/api/v1/health`, { signal: AbortSignal.timeout(2000) });
+      }
       if (r.ok) {
         setClientRustPing({ online: true, latency: Math.round(performance.now() - t0) });
       } else {
@@ -55,9 +59,9 @@ export default function AdminDashboardPage() {
 
     try {
       const [statsRes, analyticsRes, healthRes] = await Promise.all([
-        fetch('/api/admin/stats'),
-        fetch('/api/admin/analytics?range=7d'),
-        fetch('/api/admin/health'),
+        fetch('/api/admin/stats', { headers: { 'x-admin-role': 'admin' } }),
+        fetch('/api/admin/analytics?range=7d', { headers: { 'x-admin-role': 'admin' } }),
+        fetch('/api/admin/health', { headers: { 'x-admin-role': 'admin' } }),
       ]);
 
       if (statsRes.ok) setStatsData(await statsRes.json());
@@ -82,7 +86,7 @@ export default function AdminDashboardPage() {
     setTestResult(null);
     const start = performance.now();
     try {
-      const res = await fetch('http://localhost:8080/api/v1/search?q=' + encodeURIComponent(testQuery.trim()), {
+      const res = await fetch(`${RUST_API_BASE}/api/v1/search?q=` + encodeURIComponent(testQuery.trim()), {
         signal: AbortSignal.timeout(4000),
       });
       const elapsed = Math.round(performance.now() - start);
@@ -104,7 +108,7 @@ export default function AdminDashboardPage() {
     } catch (err: any) {
       setTestResult({
         status: 'error',
-        message: err.message || 'Connection to Rust daemon failed (Port 8080)',
+        message: err.message || 'Connection to Rust daemon failed',
       });
     } finally {
       setIsTesting(false);
@@ -297,7 +301,7 @@ export default function AdminDashboardPage() {
         <AdminStatCard
           title="Streaming Daemon"
           value={rustOnline ? `${rustLatency || 12} ms` : 'Standby'}
-          subtitle={rustOnline ? 'Port 8080 • Multithreaded' : 'Fallback: Seed / Local DB'}
+          subtitle={rustOnline ? 'Production Engine • Multithreaded' : 'Fallback: Seed / Local DB'}
           icon={<IconServer className="w-5 h-5 text-emerald-400" />}
           accentColor="emerald"
         />
@@ -369,7 +373,7 @@ export default function AdminDashboardPage() {
               <StatusBadge variant={rustOnline ? 'online' : 'offline'} label={rustOnline ? 'Online' : 'Standby'} />
             </div>
             <div className="text-sm font-bold text-white">
-              {rustOnline ? `Port 8080 • ${rustLatency}ms` : 'Offline / Standby'}
+              {rustOnline ? `Connected • ${rustLatency}ms` : 'Offline / Standby'}
             </div>
             <p className="text-[11px] text-slate-500">Multithreaded Tokio HLS Scraper</p>
           </div>

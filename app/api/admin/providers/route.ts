@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/auth/admin-guard';
 import { providerResolver } from '@/lib/providers/resolver';
+import { RUST_API_BASE } from '@/lib/api/moviebox-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       if (p.slug === 'moviebox-tui') {
         const start = performance.now();
         try {
-          const res = await fetch('http://localhost:8080/api/v1/search?q=ping', {
+          const res = await fetch(`${RUST_API_BASE}/api/v1/search?q=ping`, {
             signal: AbortSignal.timeout(1500),
           });
           latencyMs = Math.round(performance.now() - start);

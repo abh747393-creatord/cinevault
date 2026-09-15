@@ -99,7 +99,7 @@ export default function AdminAnalyticsPage() {
         <AdminStatCard
           title="Top Provider Node"
           value="MovieBox Rust"
-          subtitle="Port 8080 Tokio Server"
+          subtitle="Tokio High-Perf Engine"
           icon={<IconServer className="w-5 h-5 text-purple-400" />}
           accentColor="purple"
         />
