@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { notFound } from 'next/navigation';
 import {
   IconPlay,
   IconPlus,
   IconCheck,
   IconShare,
   IconStar,
+  IconAlertCircle,
 } from '@/components/ui/icons';
 import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { providerResolver } from '@/lib/providers/resolver';
@@ -23,33 +23,64 @@ import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storag
 
 export default function TvDetailsPage({ params }: { params: { slug: string } }) {
   const [show, setShow] = useState<ContentItem | null>(() => {
+    const cleanId = params.slug.replace(/^mb-/, '');
     return (
-      SEED_CONTENT.find(
-        (c) => (c.slug === params.slug || c.id === params.slug) && (c.contentType === 'tv' || c.contentType === 'anime')
-      ) || null
+      SEED_CONTENT.find((c) => {
+        const cCleanId = c.id.replace(/^mb-/, '');
+        const cExtId = c.externalId?.replace(/^mb-/, '');
+        return (
+          c.slug === params.slug ||
+          c.id === params.slug ||
+          cCleanId === cleanId ||
+          (cExtId && cExtId === cleanId)
+        ) && (c.contentType === 'tv' || c.contentType === 'anime');
+      }) || null
     );
   });
   const [loading, setLoading] = useState(!show);
+  const [error, setError] = useState<string | null>(null);
   const [inList, setInList] = useState(() => (show ? isInWatchlist(show.id) : false));
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(1);
   const [showShareDialog, setShowShareDialog] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    const targetQuery = show?.externalId || (params.slug.startsWith('mb-') ? params.slug.replace('mb-', '') : params.slug);
-    providerResolver.resolveTvShow(targetQuery).then((resolved) => {
-      if (isMounted && resolved) {
+  const loadTvShow = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), 8000)
+    );
+
+    try {
+      const resolved = await Promise.race([
+        providerResolver.resolveTvShow(params.slug),
+        timeoutPromise,
+      ]);
+
+      if (resolved) {
         setShow(resolved);
         setInList(isInWatchlist(resolved.id));
-        setLoading(false);
+        setError(null);
+      } else {
+        setError('TV show details unavailable.');
       }
-    }).catch(() => {
-      if (isMounted) setLoading(false);
-    });
-    return () => {
-      isMounted = false;
-    };
+    } catch (err: any) {
+      console.warn('[TvDetailsPage] Failed to resolve TV show:', err);
+      if (err?.message === 'Request timed out') {
+        setError('Unable to load TV show. Request timed out.');
+      } else {
+        setError('Unable to load TV show. Please check your connection.');
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [params.slug]);
+
+  useEffect(() => {
+    if (!show) {
+      loadTvShow();
+    }
+  }, [loadTvShow, show]);
 
   if (loading) {
     return (
@@ -60,8 +91,37 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
     );
   }
 
-  if (!show) {
-    notFound();
+  if (error || !show) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-4 text-center">
+        <div className="max-w-md w-full p-8 rounded-2xl bg-card/60 backdrop-blur-md border border-white/10 space-y-4 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mx-auto">
+            <IconAlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold text-white">Unable to load TV show</h2>
+            <p className="text-xs sm:text-sm text-slate-400">
+              {error || 'TV show details unavailable.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={loadTvShow}
+              className="text-xs font-semibold px-5"
+            >
+              Retry
+            </Button>
+            <Link href="/tv">
+              <Button variant="secondary" size="sm" className="text-xs font-semibold">
+                Browse TV Shows
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const handleWatchlistToggle = () => {

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter, notFound, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   IconArrowLeft,
   IconList,
@@ -16,6 +16,7 @@ import {
   IconStar,
   IconClockCircle,
   IconTV,
+  IconAlertCircle,
 } from '@/components/ui/icons';
 import { VideoPlayer } from '@/components/player/video-player';
 import { EpisodeDrawer } from '@/components/player/episode-drawer';
@@ -44,15 +45,22 @@ function WatchTvContent({
   const timeParam = searchParams.get('t');
 
   const [show, setShow] = useState<ContentItem | null>(() => {
+    const cleanId = params.id.replace(/^mb-/, '');
     return (
-      SEED_CONTENT.find(
-        (c) =>
-          (c.id === params.id || c.slug === params.id) &&
-          (c.contentType === 'tv' || c.contentType === 'anime')
-      ) || null
+      SEED_CONTENT.find((c) => {
+        const cCleanId = c.id.replace(/^mb-/, '');
+        const cExtId = c.externalId?.replace(/^mb-/, '');
+        return (
+          c.id === params.id ||
+          c.slug === params.id ||
+          cCleanId === cleanId ||
+          (cExtId && cExtId === cleanId)
+        ) && (c.contentType === 'tv' || c.contentType === 'anime');
+      }) || null
     );
   });
   const [loadingShow, setLoadingShow] = useState(!show);
+  const [error, setError] = useState<string | null>(null);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [initialTime, setInitialTime] = useState<number>(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
@@ -61,26 +69,43 @@ function WatchTvContent({
     show ? isInWatchlist(show.id) : false
   );
 
-  useEffect(() => {
-    let isMounted = true;
-    const targetQuery =
-      show?.externalId ||
-      (params.id.startsWith('mb-') ? params.id.replace('mb-', '') : params.id);
-    providerResolver
-      .resolveTvShow(targetQuery)
-      .then((resolved) => {
-        if (isMounted && resolved) {
-          setShow(resolved);
-          setLoadingShow(false);
-        }
-      })
-      .catch(() => {
-        if (isMounted) setLoadingShow(false);
-      });
-    return () => {
-      isMounted = false;
-    };
+  const loadTvShow = useCallback(async () => {
+    setLoadingShow(true);
+    setError(null);
+
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), 8000)
+    );
+
+    try {
+      const resolved = await Promise.race([
+        providerResolver.resolveTvShow(params.id),
+        timeoutPromise,
+      ]);
+
+      if (resolved) {
+        setShow(resolved);
+        setError(null);
+      } else {
+        setError('TV show details unavailable.');
+      }
+    } catch (err: any) {
+      console.warn('[WatchTvPage] Failed to resolve TV show:', err);
+      if (err?.message === 'Request timed out') {
+        setError('Unable to load TV show. Request timed out.');
+      } else {
+        setError('Unable to load TV show. Please check your connection.');
+      }
+    } finally {
+      setLoadingShow(false);
+    }
   }, [params.id]);
+
+  useEffect(() => {
+    if (!show) {
+      loadTvShow();
+    }
+  }, [loadTvShow, show]);
 
   let currentEpisode: Episode | undefined = undefined;
   let currentSeason: Season | undefined = undefined;
@@ -152,8 +177,67 @@ function WatchTvContent({
     );
   }
 
-  if (!show || !currentEpisode) {
-    notFound();
+  if (error || !show) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-4 text-center">
+        <div className="max-w-md w-full p-8 rounded-2xl bg-card/60 backdrop-blur-md border border-white/10 space-y-4 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mx-auto">
+            <IconAlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold text-white">Unable to load TV show</h2>
+            <p className="text-xs sm:text-sm text-slate-400">
+              {error || 'TV show details unavailable.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={loadTvShow}
+              className="text-xs font-semibold px-5"
+            >
+              Retry
+            </Button>
+            <Link href="/tv">
+              <Button variant="secondary" size="sm" className="text-xs font-semibold">
+                Browse TV Shows
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentEpisode) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-4 text-center">
+        <div className="max-w-md w-full p-8 rounded-2xl bg-card/60 backdrop-blur-md border border-white/10 space-y-4 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mx-auto">
+            <IconAlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold text-white">Episode Unavailable</h2>
+            <p className="text-xs sm:text-sm text-slate-400">
+              No playable episodes were found for this series.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link href={`/tv/${show.slug}`}>
+              <Button variant="primary" size="sm" className="text-xs font-semibold">
+                View Series Details
+              </Button>
+            </Link>
+            <Link href="/tv">
+              <Button variant="secondary" size="sm" className="text-xs font-semibold">
+                Browse TV Shows
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const handleNext = () => {

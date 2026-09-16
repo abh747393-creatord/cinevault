@@ -112,6 +112,22 @@ function setCached<T>(key: string, data: T, ttlSeconds: number = 600): void {
   apiCache.set(key, { data, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 export class MovieBoxApiClient {
   private baseUrl: string;
 
@@ -121,7 +137,7 @@ export class MovieBoxApiClient {
 
   async health(): Promise<{ status: string; version: string; providers: string[] }> {
     try {
-      const res = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
+      const res = await fetchWithTimeout(`${this.baseUrl}/health`, { cache: 'no-store' }, 4000);
       if (res.ok) {
         const data = await res.json();
         return {
@@ -132,7 +148,7 @@ export class MovieBoxApiClient {
       }
     } catch {}
     try {
-      const res = await fetch(`${RUST_API_BASE}/health`, { cache: 'no-store' });
+      const res = await fetchWithTimeout(`${RUST_API_BASE}/health`, { cache: 'no-store' }, 4000);
       if (res.ok) {
         const data = await res.json();
         return {
@@ -153,7 +169,7 @@ export class MovieBoxApiClient {
     if (cached) return cached;
 
     try {
-      const res = await fetch(`${this.baseUrl}/suggest?q=${encodeURIComponent(q)}`);
+      const res = await fetchWithTimeout(`${this.baseUrl}/suggest?q=${encodeURIComponent(q)}`, {}, 5000);
       if (!res.ok) return [];
       const data: string[] = await res.json();
       setCached(cacheKey, data || [], 300);
@@ -170,7 +186,7 @@ export class MovieBoxApiClient {
     const cached = getCached<MovieBoxCatalogItem[]>(cacheKey);
     if (cached) return cached;
 
-    const res = await fetch(`${this.baseUrl}/search?q=${encodeURIComponent(q)}&provider=${encodeURIComponent(provider)}&page=${page}`);
+    const res = await fetchWithTimeout(`${this.baseUrl}/search?q=${encodeURIComponent(q)}&provider=${encodeURIComponent(provider)}&page=${page}`, {}, 7000);
     if (!res.ok) throw new Error(`Search failed: ${res.status}`);
     const data: MovieBoxCatalogItem[] = await res.json();
     setCached(cacheKey, data || [], 180);
@@ -182,7 +198,7 @@ export class MovieBoxApiClient {
     const cached = getCached<HomepageResponse>(cacheKey);
     if (cached) return cached;
 
-    const res = await fetch(`${this.baseUrl}/homepage?tab=${encodeURIComponent(tab)}&page=${page}`);
+    const res = await fetchWithTimeout(`${this.baseUrl}/homepage?tab=${encodeURIComponent(tab)}&page=${page}`, {}, 8000);
     if (!res.ok) throw new Error(`Homepage fetch failed: ${res.status}`);
     const data: HomepageResponse = await res.json();
     setCached(cacheKey, data, 600); // 10 minutes cache
@@ -194,7 +210,7 @@ export class MovieBoxApiClient {
     const cached = getCached<MovieBoxMediaDetails>(cacheKey);
     if (cached) return cached;
 
-    const res = await fetch(`${this.baseUrl}/details/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}`);
+    const res = await fetchWithTimeout(`${this.baseUrl}/details/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}`, {}, 8000);
     if (!res.ok) throw new Error(`Details fetch failed: ${res.status}`);
     const data: MovieBoxMediaDetails = await res.json();
     setCached(cacheKey, data, 1800); // 30 minutes cache
@@ -202,13 +218,13 @@ export class MovieBoxApiClient {
   }
 
   async streams(id: string, provider: string = 'moviebox', season: number = 0, episode: number = 0): Promise<MovieBoxRelease[]> {
-    const res = await fetch(`${this.baseUrl}/streams/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}&season=${season}&episode=${episode}`);
+    const res = await fetchWithTimeout(`${this.baseUrl}/streams/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}&season=${season}&episode=${episode}`, {}, 8000);
     if (!res.ok) throw new Error(`Streams fetch failed: ${res.status}`);
     return res.json();
   }
 
   async subtitles(subjectId: string, resourceId: string = ''): Promise<MovieBoxSubtitle[]> {
-    const res = await fetch(`${this.baseUrl}/subtitles/${encodeURIComponent(subjectId)}?resource_id=${encodeURIComponent(resourceId)}`);
+    const res = await fetchWithTimeout(`${this.baseUrl}/subtitles/${encodeURIComponent(subjectId)}?resource_id=${encodeURIComponent(resourceId)}`, {}, 6000);
     if (!res.ok) return [];
     return res.json();
   }

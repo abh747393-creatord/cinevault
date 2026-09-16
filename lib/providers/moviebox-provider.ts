@@ -85,6 +85,28 @@ export class MovieBoxProvider implements ContentProvider {
       }),
     }));
 
+    if (isSeries && seasons.length === 0) {
+      seasons.push({
+        id: 's-1',
+        contentId: uniqueId,
+        seasonNumber: 1,
+        title: 'Season 1',
+        description: `Season 1 of ${details.title}`,
+        posterUrl: details.poster_url,
+        episodes: [
+          {
+            id: 's1e1',
+            seasonId: 's-1',
+            episodeNumber: 1,
+            title: 'Episode 1',
+            description: `Episode 1 of ${details.title}`,
+            thumbnailUrl: details.poster_url || '',
+            runtime: details.duration ? parseInt(details.duration, 10) || 45 : 45,
+          },
+        ],
+      });
+    }
+
     return {
       id: uniqueId,
       externalId: rawId,

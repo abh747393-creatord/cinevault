@@ -189,6 +189,15 @@ export function VideoPlayer({
     );
   }, [activeStreams, currentStreamIndex]);
 
+  // Unified stream error/unavailable state (handles both network/playback errors and missing stream URLs)
+  const isStreamUnavailable = useMemo(() => {
+    if (playMode !== 'stream') return false;
+    if (hasError) return true;
+    if (!activeStreams || activeStreams.length === 0) return true;
+    if (!currentStream || !currentStream.url || currentStream.url.trim().length === 0) return true;
+    return false;
+  }, [playMode, hasError, activeStreams, currentStream]);
+
   // Audio Dubs / Multi-language state
   const availableDubs = useMemo(() => {
     const list: { id: string; label: string; language: string }[] = [];
@@ -465,9 +474,7 @@ export function VideoPlayer({
 
           player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
             console.warn('Dash.js error:', e);
-            if (e.error === 'capability' || e.error === 'mediasource') {
-              handleVideoError();
-            }
+            handleVideoError();
           });
 
           player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
@@ -634,6 +641,10 @@ export function VideoPlayer({
 
   // Controls auto-hide on mouse idle
   const handleMouseMove = () => {
+    if (isStreamUnavailable) {
+      setShowControls(false);
+      return;
+    }
     setShowControls((prev) => (prev ? prev : true));
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     if (isPlaying) {
@@ -1011,8 +1022,85 @@ export function VideoPlayer({
           </div>
         ) : (
           <>
-            {/* Video Element */}
-            {currentStream ? (
+            {/* Video Element or Stream Unavailable Screen */}
+            {isStreamUnavailable ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 sm:p-6 text-center z-30 space-y-3 sm:space-y-4 overflow-y-auto max-h-full">
+                <IconAlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-accent animate-bounce flex-shrink-0" />
+                <div className="space-y-1 max-w-md">
+                  <h3 className="text-base sm:text-xl font-bold text-white">Stream Temporarily Unavailable</h3>
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    The requested stream could not be loaded from this provider.
+                  </p>
+                </div>
+
+                {/* Quick Quality / Mirror Selection - only if valid alternative streams exist */}
+                {validAlternativeStreams.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-center gap-2 max-w-md">
+                    <span className="text-xs text-slate-400 w-full mb-0.5 font-medium">Available qualities:</span>
+                    {validAlternativeStreams.map((s) => {
+                      const streamIdx = activeStreams.findIndex((item) => item.id === s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setHasError(false);
+                            handleQualityChange(streamIdx !== -1 ? streamIdx : 0);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary hover:bg-primary-hover text-white shadow-lg transition-all"
+                        >
+                          {s.quality} ({s.providerName || 'Mirror'})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pt-1">
+                  {content.youtubeId && (
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setHasError(false);
+                        setPlayMode('trailer');
+                      }}
+                    >
+                      Watch Official 4K Trailer
+                    </Button>
+                  )}
+
+                  {activeStreams.length > 1 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setHasError(false);
+                        const nextIdx = (currentStreamIndex + 1) % activeStreams.length;
+                        handleQualityChange(nextIdx);
+                      }}
+                    >
+                      Try Another Source
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      setHasError(false);
+                      setIsLoading(true);
+                      videoRef.current?.load();
+                    }}
+                  >
+                    Retry Stream
+                  </Button>
+                </div>
+              </div>
+            ) : currentStream ? (
               <video
                 ref={videoRef}
                 crossOrigin="anonymous"
@@ -1031,175 +1119,93 @@ export function VideoPlayer({
                 onError={handleVideoError}
                 playsInline
               >
-          {currentStream.subtitles?.map((sub: SubtitleTrack) => (
-            <track
-              key={sub.id}
-              id={sub.id}
-              kind="subtitles"
-              src={sub.src}
-              srcLang={sub.language}
-              label={sub.label}
-            />
-          ))}
-        </video>
-      ) : (
-        <div className="text-center p-8 space-y-3">
-          <IconAlertCircle className="w-12 h-12 text-accent mx-auto" />
-          <h3 className="text-lg font-bold text-white">This source is temporarily unavailable</h3>
-          <p className="text-sm text-slate-400 max-w-md">
-            The requested stream could not be loaded from this provider. Please try selecting another source.
-          </p>
-        </div>
-      )}
+                {currentStream.subtitles?.map((sub: SubtitleTrack) => (
+                  <track
+                    key={sub.id}
+                    id={sub.id}
+                    kind="subtitles"
+                    src={sub.src}
+                    srcLang={sub.language}
+                    label={sub.label}
+                  />
+                ))}
+              </video>
+            ) : null}
 
-      {/* Loading Spinner */}
-      {isLoading && !hasError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
+            {/* Loading Spinner */}
+            {isLoading && !isStreamUnavailable && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
 
-      {/* Error Overlay */}
-      {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 sm:p-6 text-center z-30 space-y-3 sm:space-y-4 overflow-y-auto max-h-full">
-          <IconAlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-accent animate-bounce flex-shrink-0" />
-          <div className="space-y-1 max-w-md">
-            <h3 className="text-base sm:text-xl font-bold text-white">Stream Temporarily Unavailable</h3>
-            <p className="text-xs sm:text-sm text-slate-400">
-              Could not load video from the current source.
-            </p>
-          </div>
+            {/* Subtitle Cue Overlay (Netflix-style floating caption) */}
+            {!isStreamUnavailable && activeSubtitle !== 'off' && activeCueText && (
+              <div
+                className={cn(
+                  'absolute left-1/2 -translate-x-1/2 max-w-[85%] sm:max-w-[75%] text-center pointer-events-none z-20 transition-all duration-150 px-2',
+                  showControls ? 'bottom-24 sm:bottom-28' : 'bottom-8 sm:bottom-12'
+                )}
+              >
+                <span
+                  className="inline-block px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-black/85 text-white font-medium text-sm sm:text-base md:text-xl tracking-wide shadow-2xl backdrop-blur-xs border border-white/10"
+                  style={{
+                    textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8)',
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {activeCueText}
+                </span>
+              </div>
+            )}
 
-          {/* Quick Quality / Mirror Selection - only if valid alternative streams exist */}
-          {validAlternativeStreams.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2 max-w-md">
-              <span className="text-xs text-slate-400 w-full mb-0.5 font-medium">Available qualities:</span>
-              {validAlternativeStreams.map((s) => {
-                const streamIdx = activeStreams.findIndex((item) => item.id === s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleQualityChange(streamIdx !== -1 ? streamIdx : 0)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary hover:bg-primary-hover text-white shadow-lg transition-all"
+            {/* Big Center Play/Pause button indicator on click */}
+            {!isPlaying && !isLoading && !isStreamUnavailable && showControls && (
+              <button
+                onClick={togglePlay}
+                className="absolute w-20 h-20 rounded-full bg-primary/90 hover:bg-primary text-white flex items-center justify-center shadow-2xl transition-all scale-100 hover:scale-110 z-20 animate-fade-in focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                aria-label="Play video"
+                title="Play video"
+              >
+                <IconPlay className="w-9 h-9 text-white ml-1" variant="Bold" />
+              </button>
+            )}
+
+            {/* Player Header (Title, Episode) */}
+            {!isStreamUnavailable && (
+              <div
+                className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between transition-opacity duration-300 z-30 ${
+                  showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                <div>
+                  <h2 className="text-base sm:text-xl font-bold text-white drop-shadow">
+                    {content.title}
+                  </h2>
+                  {episode && (
+                    <p className="text-xs sm:text-sm text-slate-300">
+                      Episode {episode.episodeNumber}: {episode.title}
+                    </p>
+                  )}
+                </div>
+
+                {onToggleEpisodeDrawer && (
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    onClick={onToggleEpisodeDrawer}
+                    className="flex items-center gap-1.5 text-xs"
+                    aria-label="Open episodes drawer"
                   >
-                    {s.quality} ({s.providerName || 'Mirror'})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pt-1">
-            {content.youtubeId && (
-              <Button
-                variant="accent"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  setHasError(false);
-                  setPlayMode('trailer');
-                }}
-              >
-                Watch Official 4K Trailer
-              </Button>
+                    <IconList className="w-4 h-4" />
+                    Episodes
+                  </Button>
+                )}
+              </div>
             )}
 
-            {activeStreams.length > 1 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const nextIdx = (currentStreamIndex + 1) % activeStreams.length;
-                  handleQualityChange(nextIdx);
-                }}
-              >
-                Try Another Source
-              </Button>
-            )}
-
-            <Button
-              variant="primary"
-              size="sm"
-              className="text-xs"
-              onClick={() => {
-                setHasError(false);
-                setIsLoading(true);
-                videoRef.current?.load();
-              }}
-            >
-              Retry Stream
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Subtitle Cue Overlay (Netflix-style floating caption) */}
-      {activeSubtitle !== 'off' && activeCueText && (
-        <div
-          className={cn(
-            'absolute left-1/2 -translate-x-1/2 max-w-[85%] sm:max-w-[75%] text-center pointer-events-none z-20 transition-all duration-150 px-2',
-            showControls ? 'bottom-24 sm:bottom-28' : 'bottom-8 sm:bottom-12'
-          )}
-        >
-          <span
-            className="inline-block px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-black/85 text-white font-medium text-sm sm:text-base md:text-xl tracking-wide shadow-2xl backdrop-blur-xs border border-white/10"
-            style={{
-              textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8)',
-              whiteSpace: 'pre-line',
-            }}
-          >
-            {activeCueText}
-          </span>
-        </div>
-      )}
-
-      {/* Big Center Play/Pause button indicator on click */}
-      {!isPlaying && !isLoading && !hasError && showControls && (
-        <button
-          onClick={togglePlay}
-          className="absolute w-20 h-20 rounded-full bg-primary/90 hover:bg-primary text-white flex items-center justify-center shadow-2xl transition-all scale-100 hover:scale-110 z-20 animate-fade-in focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-          aria-label="Play video"
-          title="Play video"
-        >
-          <IconPlay className="w-9 h-9 text-white ml-1" variant="Bold" />
-        </button>
-      )}
-
-      {/* Player Header (Title, Episode) */}
-      <div
-        className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between transition-opacity duration-300 z-30 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <div>
-          <h2 className="text-base sm:text-xl font-bold text-white drop-shadow">
-            {content.title}
-          </h2>
-          {episode && (
-            <p className="text-xs sm:text-sm text-slate-300">
-              Episode {episode.episodeNumber}: {episode.title}
-            </p>
-          )}
-        </div>
-
-        {onToggleEpisodeDrawer && (
-          <Button
-            variant="glass"
-            size="sm"
-            onClick={onToggleEpisodeDrawer}
-            className="flex items-center gap-1.5 text-xs"
-            aria-label="Open episodes drawer"
-          >
-            <IconList className="w-4 h-4" />
-            Episodes
-          </Button>
-        )}
-      </div>
-
-      {/* Player Controls Bottom Bar */}
-      {!hasError && (
+            {/* Player Controls Bottom Bar */}
+            {!isStreamUnavailable && (
         <div
           className={`absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-1.5 sm:space-y-3 transition-opacity duration-300 z-30 ${
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'

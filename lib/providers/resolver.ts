@@ -37,8 +37,18 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getMovie failed:`, err);
       }
     }
-    // Final fallback: Seed database
-    return SEED_CONTENT.find((c) => (c.id === idOrSlug || c.slug === idOrSlug) && c.contentType === 'movie') || null;
+    // Final fallback: Seed database (matching by ID, slug, stripped prefix, or externalId)
+    const cleanId = idOrSlug.replace(/^mb-/, '');
+    return SEED_CONTENT.find((c) => {
+      const cCleanId = c.id.replace(/^mb-/, '');
+      const cExtId = c.externalId?.replace(/^mb-/, '');
+      return (
+        c.id === idOrSlug ||
+        c.slug === idOrSlug ||
+        cCleanId === cleanId ||
+        (cExtId && cExtId === cleanId)
+      ) && c.contentType === 'movie';
+    }) || null;
   }
 
   async resolveTvShow(idOrSlug: string): Promise<ContentItem | null> {
@@ -51,7 +61,18 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getTvShow failed:`, err);
       }
     }
-    return SEED_CONTENT.find((c) => (c.id === idOrSlug || c.slug === idOrSlug) && (c.contentType === 'tv' || c.contentType === 'anime')) || null;
+    // Final fallback: Seed database (matching by ID, slug, stripped prefix, or externalId)
+    const cleanId = idOrSlug.replace(/^mb-/, '');
+    return SEED_CONTENT.find((c) => {
+      const cCleanId = c.id.replace(/^mb-/, '');
+      const cExtId = c.externalId?.replace(/^mb-/, '');
+      return (
+        c.id === idOrSlug ||
+        c.slug === idOrSlug ||
+        cCleanId === cleanId ||
+        (cExtId && cExtId === cleanId)
+      ) && (c.contentType === 'tv' || c.contentType === 'anime');
+    }) || null;
   }
 
   async resolveEpisodes(contentId: string, seasonNumber: number = 1): Promise<Episode[]> {
@@ -64,7 +85,17 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getEpisodes failed:`, err);
       }
     }
-    const show = SEED_CONTENT.find((c) => c.id === contentId || c.slug === contentId);
+    const cleanId = contentId.replace(/^mb-/, '');
+    const show = SEED_CONTENT.find((c) => {
+      const cCleanId = c.id.replace(/^mb-/, '');
+      const cExtId = c.externalId?.replace(/^mb-/, '');
+      return (
+        c.id === contentId ||
+        c.slug === contentId ||
+        cCleanId === cleanId ||
+        (cExtId && cExtId === cleanId)
+      );
+    });
     const season = show?.seasons?.find((s) => s.seasonNumber === seasonNumber) || show?.seasons?.[0];
     return season?.episodes || [];
   }
