@@ -74,7 +74,10 @@ class ProviderResolver {
       if (!provider.enabled) continue;
       try {
         const streams = await provider.getStreams(contentId, episodeId, dubId);
-        if (streams && streams.length > 0) return streams;
+        const validStreams = (streams || []).filter(
+          (s) => Boolean(s?.url && typeof s.url === 'string' && s.url.trim().length > 0)
+        );
+        if (validStreams.length > 0) return validStreams;
       } catch (err) {
         console.warn(`[Provider ${provider.slug}] getStreams failed:`, err);
       }
@@ -83,23 +86,47 @@ class ProviderResolver {
   }
 
   async globalSearch(query: string): Promise<ProviderSearchResult[]> {
-    const results: ProviderSearchResult[] = [];
-    const seenIds = new Set<string>();
+    const q = query.trim();
+    if (!q) return [];
 
-    for (const provider of this.providers) {
-      if (!provider.enabled) continue;
+    const enabledProviders = this.providers
+      .filter((p) => p.enabled)
+      .sort((a, b) => a.priority - b.priority);
+
+    // Parallel provider search with per-provider timeout (3500ms)
+    const searchPromises = enabledProviders.map(async (provider) => {
       try {
-        const list = await provider.search(query);
-        for (const item of list) {
-          if (!seenIds.has(item.title.toLowerCase())) {
-            seenIds.add(item.title.toLowerCase());
-            results.push(item);
+        const timeoutPromise = new Promise<ProviderSearchResult[]>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout on ${provider.slug}`)), 3500)
+        );
+        const list = await Promise.race([provider.search(q), timeoutPromise]);
+        return { provider, list: list || [] };
+      } catch (err) {
+        console.warn(`[ProviderResolver] Provider search error for ${provider.name}:`, err);
+        return { provider, list: [] };
+      }
+    });
+
+    const settled = await Promise.allSettled(searchPromises);
+
+    const results: ProviderSearchResult[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const item of settled) {
+      if (item.status === 'fulfilled' && item.value.list.length > 0) {
+        for (const res of item.value.list) {
+          // Normalize key for deduplication: title + release year
+          const normalizedTitle = res.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+          const dedupeKey = res.year ? `${normalizedTitle}:${res.year}` : normalizedTitle;
+
+          if (!seenKeys.has(dedupeKey)) {
+            seenKeys.add(dedupeKey);
+            results.push(res);
           }
         }
-      } catch (err) {
-        console.warn(`[Provider ${provider.slug}] search failed:`, err);
       }
     }
+
     return results;
   }
 }

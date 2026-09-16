@@ -6,57 +6,6 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_USERS = [
-  {
-    id: 'demo-admin-123',
-    email: 'admin@cinevault.local',
-    username: 'superadmin',
-    displayName: 'Super Admin',
-    role: 'admin',
-    avatarUrl: null,
-    createdAt: '2024-01-01T00:00:00.000Z',
-    preferredLanguage: 'English',
-    defaultQuality: '1080p',
-    watchCount: 14,
-  },
-  {
-    id: 'demo-user-1',
-    email: 'marcus.vance@example.com',
-    username: 'marcusv',
-    displayName: 'Marcus Vance',
-    role: 'user',
-    avatarUrl: null,
-    createdAt: '2024-02-15T10:20:00.000Z',
-    preferredLanguage: 'English',
-    defaultQuality: '4K',
-    watchCount: 28,
-  },
-  {
-    id: 'demo-user-2',
-    email: 'elena.rostova@example.com',
-    username: 'elenar',
-    displayName: 'Elena Rostova',
-    role: 'moderator',
-    avatarUrl: null,
-    createdAt: '2024-03-01T14:45:00.000Z',
-    preferredLanguage: 'English',
-    defaultQuality: '1080p',
-    watchCount: 45,
-  },
-  {
-    id: 'demo-user-3',
-    email: 'kenji.sato@example.com',
-    username: 'kenjis',
-    displayName: 'Kenji Sato',
-    role: 'user',
-    avatarUrl: null,
-    createdAt: '2024-03-20T08:15:00.000Z',
-    preferredLanguage: 'Japanese',
-    defaultQuality: '1080p',
-    watchCount: 19,
-  },
-];
-
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
   if (!auth.authorized) {
@@ -123,31 +72,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fallback to Demo Users
-  let filtered = [...DEMO_USERS];
-  if (role !== 'all') {
-    filtered = filtered.filter((u) => u.role === role);
-  }
-  if (search) {
-    filtered = filtered.filter(
-      (u) =>
-        u.email.toLowerCase().includes(search) ||
-        u.username.toLowerCase().includes(search) ||
-        u.displayName.toLowerCase().includes(search)
-    );
-  }
-
-  const total = filtered.length;
-  const start = (page - 1) * limit;
-  const paginated = filtered.slice(start, start + limit);
-
+  // Clean empty state when no database records exist
   return NextResponse.json({
-    users: paginated,
+    users: [],
     pagination: {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(total / limit),
+      total: 0,
+      totalPages: 0,
     },
   });
 }

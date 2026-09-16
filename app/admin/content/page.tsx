@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/admin/status-badge';
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { ContentItem } from '@/types/content';
+import { adminFetch } from '@/lib/api/admin-fetch';
 
 export default function AdminContentPage() {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -37,6 +38,8 @@ export default function AdminContentPage() {
   const [newRating, setNewRating] = useState(8.5);
   const [newDesc, setNewDesc] = useState('');
   const [newPoster, setNewPoster] = useState('');
+  const [newDirector, setNewDirector] = useState('');
+  const [newCast, setNewCast] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Delete Dialog
@@ -51,9 +54,7 @@ export default function AdminContentPage() {
         search: searchQuery,
         type: selectedType,
       });
-      const res = await fetch(`/api/admin/content?${params}`, {
-        headers: { 'x-admin-role': 'admin' },
-      });
+      const res = await adminFetch(`/api/admin/content?${params}`);
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
@@ -76,11 +77,10 @@ export default function AdminContentPage() {
     if (!newTitle.trim()) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/content', {
+      const res = await adminFetch('/api/admin/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-role': 'admin',
         },
         body: JSON.stringify({
           title: newTitle.trim(),
@@ -88,13 +88,18 @@ export default function AdminContentPage() {
           year: newYear,
           rating: newRating,
           description: newDesc,
-          posterUrl: newPoster,
+          quality: '1080p',
+          director: newDirector.trim() || undefined,
+          cast: newCast ? newCast.split(',').map((s) => s.trim()) : undefined,
+          posterUrl: newPoster.trim() || undefined,
         }),
       });
       if (res.ok) {
         setShowAddModal(false);
         setNewTitle('');
         setNewDesc('');
+        setNewDirector('');
+        setNewCast('');
         setNewPoster('');
         fetchContent();
       }
@@ -108,9 +113,8 @@ export default function AdminContentPage() {
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     try {
-      await fetch(`/api/admin/content?id=${deleteTarget.id}`, {
+      await adminFetch(`/api/admin/content?id=${deleteTarget.id}`, {
         method: 'DELETE',
-        headers: { 'x-admin-role': 'admin' },
       });
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);

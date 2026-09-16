@@ -13,6 +13,8 @@ function SearchContent() {
   const queryParam = searchParams.get('q') || '';
   const [query, setQuery] = useState(queryParam);
   const [activeTab, setActiveTab] = useState<'all' | ContentType>('all');
+  const [liveResults, setLiveResults] = useState<ContentItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     if (queryParam) {
@@ -20,16 +22,17 @@ function SearchContent() {
     }
   }, [queryParam]);
 
-  const [liveResults, setLiveResults] = useState<ContentItem[]>([]);
-
   useEffect(() => {
     const q = query.trim();
     if (!q) {
       setLiveResults([]);
+      setIsSearching(false);
       return;
     }
 
     let isMounted = true;
+    setIsSearching(true);
+
     const timer = setTimeout(() => {
       import('@/lib/providers/resolver').then(({ providerResolver }) => {
         providerResolver.globalSearch(q).then((results) => {
@@ -50,9 +53,12 @@ function SearchContent() {
             status: 'released',
           }));
           setLiveResults(mapped);
-        }).catch(() => {});
+          setIsSearching(false);
+        }).catch(() => {
+          if (isMounted) setIsSearching(false);
+        });
       });
-    }, 300);
+    }, 250);
 
     return () => {
       isMounted = false;
@@ -82,10 +88,11 @@ function SearchContent() {
       );
     });
 
-    const combined = [...localMatches];
-    const seenTitles = new Set(localMatches.map((m) => m.title.toLowerCase()));
+    // Prioritize live provider-backed results from Sign Ultra VIP Cinema
+    const combined = [...liveResults];
+    const seenTitles = new Set(liveResults.map((m) => m.title.toLowerCase()));
 
-    for (const r of liveResults) {
+    for (const r of localMatches) {
       if (!seenTitles.has(r.title.toLowerCase())) {
         seenTitles.add(r.title.toLowerCase());
         combined.push(r);

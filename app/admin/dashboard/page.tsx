@@ -22,6 +22,7 @@ import { AdminTable, Column } from '@/components/admin/admin-table';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { Button } from '@/components/ui/button';
 import { RUST_API_BASE } from '@/lib/api/moviebox-client';
+import { adminFetch } from '@/lib/api/admin-fetch';
 
 export default function AdminDashboardPage() {
   const [statsData, setStatsData] = useState<any>(null);
@@ -59,9 +60,9 @@ export default function AdminDashboardPage() {
 
     try {
       const [statsRes, analyticsRes, healthRes] = await Promise.all([
-        fetch('/api/admin/stats', { headers: { 'x-admin-role': 'admin' } }),
-        fetch('/api/admin/analytics?range=7d', { headers: { 'x-admin-role': 'admin' } }),
-        fetch('/api/admin/health', { headers: { 'x-admin-role': 'admin' } }),
+        adminFetch('/api/admin/stats'),
+        adminFetch('/api/admin/analytics?range=7d'),
+        adminFetch('/api/admin/health'),
       ]);
 
       if (statsRes.ok) setStatsData(await statsRes.json());

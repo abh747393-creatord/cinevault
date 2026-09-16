@@ -7,69 +7,6 @@ import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_ACTIVITY = [
-  {
-    id: 'act-1',
-    userId: 'demo-user-1',
-    userEmail: 'marcus.vance@example.com',
-    userName: 'Marcus Vance',
-    contentId: 'movie-1',
-    contentTitle: 'Inception',
-    contentType: 'movie',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
-    progressSeconds: 4320,
-    durationSeconds: 8880,
-    completed: false,
-    updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    device: 'Chrome / Windows',
-  },
-  {
-    id: 'act-2',
-    userId: 'demo-user-2',
-    userEmail: 'elena.rostova@example.com',
-    userName: 'Elena Rostova',
-    contentId: 'tv-1',
-    contentTitle: 'Stranger Things',
-    contentType: 'tv',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/49WJfeN0moxb9IPfGn8AIqMGskD.jpg',
-    progressSeconds: 3100,
-    durationSeconds: 3100,
-    completed: true,
-    updatedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    device: 'Safari / MacOS',
-  },
-  {
-    id: 'act-3',
-    userId: 'demo-user-3',
-    userEmail: 'kenji.sato@example.com',
-    userName: 'Kenji Sato',
-    contentId: 'anime-1',
-    contentTitle: 'Attack on Titan',
-    contentType: 'anime',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg',
-    progressSeconds: 1200,
-    durationSeconds: 1440,
-    completed: false,
-    updatedAt: new Date(Date.now() - 1000 * 60 * 95).toISOString(),
-    device: 'Firefox / Linux',
-  },
-  {
-    id: 'act-4',
-    userId: 'demo-admin-123',
-    userEmail: 'admin@cinevault.local',
-    userName: 'Super Admin',
-    contentId: 'movie-2',
-    contentTitle: 'The Dark Knight',
-    contentType: 'movie',
-    posterUrl: 'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-    progressSeconds: 9120,
-    durationSeconds: 9120,
-    completed: true,
-    updatedAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-    device: 'Edge / Windows',
-  },
-];
-
 export async function GET(request: NextRequest) {
   const auth = await verifyAdminRequest(request);
   if (!auth.authorized) {
@@ -98,8 +35,7 @@ export async function GET(request: NextRequest) {
         .range((page - 1) * limit, page * limit - 1);
 
       if (!error && data && data.length > 0) {
-        const total = count ?? data.length;
-        const mapped = data.map((item: any) => ({
+        let mapped = data.map((item: any) => ({
           id: item.id,
           userId: item.user_id,
           userEmail: item.profiles?.email || `${item.profiles?.username || 'user'}@cinevault.local`,
@@ -114,6 +50,17 @@ export async function GET(request: NextRequest) {
           updatedAt: item.updated_at,
           device: 'Web Client',
         }));
+
+        if (search) {
+          mapped = mapped.filter(
+            (a: any) =>
+              a.userName.toLowerCase().includes(search) ||
+              a.userEmail.toLowerCase().includes(search) ||
+              a.contentTitle.toLowerCase().includes(search)
+          );
+        }
+
+        const total = count ?? mapped.length;
 
         return NextResponse.json({
           activity: mapped,
@@ -130,28 +77,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fallback demo activity
-  let filtered = [...DEMO_ACTIVITY];
-  if (search) {
-    filtered = filtered.filter(
-      (a) =>
-        a.userName.toLowerCase().includes(search) ||
-        a.userEmail.toLowerCase().includes(search) ||
-        a.contentTitle.toLowerCase().includes(search)
-    );
-  }
-
-  const total = filtered.length;
-  const start = (page - 1) * limit;
-  const paginated = filtered.slice(start, start + limit);
-
+  // Clean empty state when no records exist
   return NextResponse.json({
-    activity: paginated,
+    activity: [],
     pagination: {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(total / limit),
+      total: 0,
+      totalPages: 0,
     },
   });
 }

@@ -39,6 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       const profile = data as any;
+      const normalized = email ? email.trim().toLowerCase() : '';
+      const isAdminUser = normalized === 'abh747393@gmail.com';
+
       if (profile && !error) {
         setUser({
           id: profile.id,
@@ -46,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           username: profile.username || email.split('@')[0],
           displayName: profile.display_name || email.split('@')[0],
           avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-          role: (profile.role as UserRole) || 'user',
+          role: isAdminUser ? 'admin' : 'user',
           preferredLanguage: profile.preferred_language || 'English',
           preferredSubtitleLanguage: profile.preferred_subtitle_language || 'English',
           defaultQuality: profile.default_quality || '1080p',
@@ -62,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           username: email.split('@')[0],
           displayName: email.split('@')[0],
           avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-          role: 'user',
+          role: isAdminUser ? 'admin' : 'user',
           preferredLanguage: 'English',
           preferredSubtitleLanguage: 'English',
           defaultQuality: '1080p',
@@ -75,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: userId,
             username: initialProfile.username,
             display_name: initialProfile.displayName,
-            role: 'user',
+            role: isAdminUser ? 'admin' : 'user',
           },
         ]);
         setUser(initialProfile);
@@ -246,7 +249,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const switchRole = useCallback((role: UserRole) => {
     if (!user) return;
-    const updated = { ...user, role };
+    const normalized = user.email ? user.email.trim().toLowerCase() : '';
+    // Only authorized administrator can have admin role
+    const safeRole: UserRole = role === 'admin' && normalized === 'abh747393@gmail.com' ? 'admin' : 'user';
+    const updated = { ...user, role: safeRole };
     setUser(updated);
     saveStoredUser(updated);
   }, [user]);

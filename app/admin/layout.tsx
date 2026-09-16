@@ -1,20 +1,40 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { AdminHeader } from '@/components/admin/admin-header';
-import { IconShield, IconArrowRightUp } from '@/components/ui/icons';
+import { IconShield, IconArrowRightUp, IconLock } from '@/components/ui/icons';
 import { Button } from '@/components/ui/button';
+import { ADMIN_EMAIL, normalizeEmail } from '@/lib/auth/admin-constants';
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, switchRole } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // If on the dedicated admin login page, bypass admin chrome and render directly
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
+  const isVerifiedAdmin =
+    user &&
+    user.role === 'admin' &&
+    normalizeEmail(user.email) === ADMIN_EMAIL;
+
+  useEffect(() => {
+    if (!loading && !isVerifiedAdmin) {
+      router.replace(`/admin/login?redirect=${encodeURIComponent(pathname || '/admin/dashboard')}`);
+    }
+  }, [loading, isVerifiedAdmin, router, pathname]);
 
   if (loading) {
     return (
@@ -28,7 +48,7 @@ export default function AdminLayout({
   }
 
   // Strict RBAC Access Check
-  if (!user || user.role !== 'admin') {
+  if (!isVerifiedAdmin) {
     return (
       <div className="min-h-screen bg-[#0a0c10] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-card border border-white/10 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
@@ -41,29 +61,29 @@ export default function AdminLayout({
               Access Restricted
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
-              The CineVault Control Center is restricted to verified administrative personnel.
+              The CineVault Control Center is restricted to verified administrative personnel ({ADMIN_EMAIL}).
               {user ? (
                 <>
                   {' '}You are currently signed in as{' '}
-                  <strong className="text-white capitalize">{user.role}</strong> ({user.email}).
+                  <strong className="text-white">{user.email}</strong>.
                 </>
               ) : (
-                ' Please sign in with an administrative account to proceed.'
+                ' Please sign in with the authorized administrator account to proceed.'
               )}
             </p>
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
-            {user && (
+            <Link href="/admin/login" className="w-full sm:w-auto">
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => switchRole('admin')}
-                className="w-full sm:w-auto text-xs font-bold"
+                className="w-full sm:w-auto text-xs font-bold gap-1.5"
               >
-                Switch Role to Admin
+                <IconLock className="w-3.5 h-3.5" />
+                Sign In to Admin
               </Button>
-            )}
+            </Link>
 
             <Link href="/" className="w-full sm:w-auto">
               <Button

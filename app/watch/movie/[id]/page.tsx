@@ -109,7 +109,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-6 space-y-8">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 md:px-12 py-4 sm:py-6 space-y-6 sm:space-y-8 overflow-x-hidden">
       {/* Back button & Navigation */}
       <div className="flex items-center justify-between">
         <Link
@@ -146,7 +146,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
       </div>
 
       {/* Main HTML5 Video Player Container */}
-      <div className="w-full">
+      <div className="w-full max-w-full overflow-hidden">
         <VideoPlayer
           content={movie}
           streams={streams}

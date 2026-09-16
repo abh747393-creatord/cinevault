@@ -212,9 +212,9 @@ export function DesktopNav() {
           </div>
 
           {/* Quick Admin Access */}
-          {user?.role === 'admin' && (
+          {user?.role === 'admin' && user?.email?.trim().toLowerCase() === 'abh747393@gmail.com' && (
             <Link
-              href="/admin"
+              href="/admin/dashboard"
               prefetch={false}
               className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/20 hover:bg-primary/30 text-primary border border-primary/40 text-xs font-bold transition-all shadow-sm"
               title="CineVault Super Admin Dashboard"
@@ -260,8 +260,8 @@ export function DesktopNav() {
             )}
           </div>
 
-          {/* Profile Dropdown / Sign in button */}
-          {user ? (
+          {/* Profile Dropdown (Only for signed in accounts) */}
+          {user && (
             <div className="relative">
               <button
                 type="button"
@@ -283,30 +283,27 @@ export function DesktopNav() {
                   <div className="px-3 py-2 border-b border-white/10">
                     <p className="text-sm font-bold text-white truncate">{user.displayName}</p>
                     <p className="text-xs text-slate-400 truncate">{user.email}</p>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <Badge variant={user.role === 'admin' ? 'accent' : 'subtle'} size="sm">
-                        {user.role.toUpperCase()}
-                      </Badge>
-                      <button
-                        type="button"
-                        onClick={() => switchRole(user.role === 'admin' ? 'user' : 'admin')}
-                        className="text-[10px] text-primary hover:underline focus-visible:outline-none"
-                        title="Click to toggle demo role"
-                      >
-                        (Switch to {user.role === 'admin' ? 'User' : 'Admin'})
-                      </button>
-                    </div>
+                    {user.role === 'admin' && user.email?.trim().toLowerCase() === 'abh747393@gmail.com' && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <Badge variant="accent" size="sm">
+                          ADMINISTRATOR
+                        </Badge>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
-                    <Link
-                      href="/profile"
-                      onClick={() => setShowProfileMenu(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                      <IconUser className="w-4 h-4 text-slate-400" />
-                      Profile & Stats
-                    </Link>
+                    {user.role === 'admin' && user.email?.trim().toLowerCase() === 'abh747393@gmail.com' && (
+                      <Link
+                        href="/admin/dashboard"
+                        prefetch={false}
+                        onClick={() => setShowProfileMenu(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
+                      >
+                        <IconShield className="w-4 h-4 text-accent" />
+                        Admin Dashboard
+                      </Link>
+                    )}
                     <Link
                       href="/my-list"
                       onClick={() => setShowProfileMenu(false)}
@@ -331,17 +328,6 @@ export function DesktopNav() {
                       <IconSettings className="w-4 h-4 text-slate-400" />
                       Preferences
                     </Link>
-                    {user.role === 'admin' && (
-                      <Link
-                        href="/admin"
-                        prefetch={false}
-                        onClick={() => setShowProfileMenu(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
-                      >
-                        <IconShield className="w-4 h-4 text-accent" />
-                        Admin Dashboard
-                      </Link>
-                    )}
                   </div>
 
                   <div className="pt-2 border-t border-white/10">
@@ -359,19 +345,6 @@ export function DesktopNav() {
                   </div>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 shrink-0">
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="whitespace-nowrap text-xs px-3">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button variant="primary" size="sm" className="whitespace-nowrap text-xs px-3.5 shadow-lg shadow-primary/20">
-                  Get Started
-                </Button>
-              </Link>
             </div>
           )}
         </div>

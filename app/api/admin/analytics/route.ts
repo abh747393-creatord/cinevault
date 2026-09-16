@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/auth/admin-guard';
-import { SEED_GENRES, SEED_CONTENT } from '@/lib/data/catalog-seed';
+import { getServerClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,32 +19,68 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '7d';
 
-  // Generate date points based on range
   const days = range === '30d' ? 30 : range === '90d' ? 90 : 7;
-  const timeSeriesData = [];
   const now = new Date();
 
+  // Initialize date buckets
+  const timeSeriesMap = new Map<string, { label: string; value: number; secondaryValue: number }>();
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
     const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    // Simulated realistic curve centered around active baseline
-    const baseVal = 320 + Math.floor(Math.sin(i * 0.7) * 90) + (i % 3) * 25;
-    timeSeriesData.push({
-      label,
-      value: baseVal,
-      secondaryValue: Math.floor(baseVal * 0.7),
-    });
+    timeSeriesMap.set(key, { label, value: 0, secondaryValue: 0 });
   }
 
-  // Genre breakdown
-  const genreBreakdown = [
-    { label: 'Action & Sci-Fi', value: 482 },
-    { label: 'Animation & Anime', value: 395 },
-    { label: 'Drama & Crime', value: 310 },
-    { label: 'Thriller & Mystery', value: 240 },
-    { label: 'Adventure', value: 195 },
-  ];
+  let totalStreams = 0;
+  let totalMinutes = 0;
+  let completedCount = 0;
+
+  const supabase = getAdminClient() || getServerClient();
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const sinceDate = new Date();
+      sinceDate.setDate(sinceDate.getDate() - days);
+
+      const { data: history } = await supabase
+        .from('watch_history')
+        .select('progress_seconds, completed, updated_at')
+        .gte('updated_at', sinceDate.toISOString());
+
+      if (history && history.length > 0) {
+        totalStreams = history.length;
+        for (const h of history) {
+          const dayKey = h.updated_at ? h.updated_at.slice(0, 10) : '';
+          if (timeSeriesMap.has(dayKey)) {
+            const entry = timeSeriesMap.get(dayKey)!;
+            entry.value += 1;
+            if (h.completed) {
+              entry.secondaryValue += 1;
+              completedCount++;
+            }
+          }
+          totalMinutes += Math.round((h.progress_seconds || 0) / 60);
+        }
+      }
+    } catch (e) {
+      console.error('[Analytics] Query error:', e);
+    }
+  }
+
+  const timeSeriesData = Array.from(timeSeriesMap.values());
+
+  // Genre breakdown from real catalog content
+  const genreCounts: Record<string, number> = {};
+  for (const item of SEED_CONTENT) {
+    for (const g of item.genres || []) {
+      genreCounts[g.name] = (genreCounts[g.name] || 0) + 1;
+    }
+  }
+
+  const genreBreakdown = Object.entries(genreCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, value]) => ({ label, value }));
 
   // Content type breakdown
   const contentTypeBreakdown = [
@@ -50,12 +89,23 @@ export async function GET(request: NextRequest) {
     { label: 'Anime', value: SEED_CONTENT.filter((c) => c.contentType === 'anime').length },
   ];
 
-  // Streaming quality distribution
-  const qualityDistribution = [
-    { label: '1080p Full HD', value: 62 },
-    { label: '4K Ultra HD', value: 28 },
-    { label: '720p HD', value: 10 },
-  ];
+  // Quality distribution based on real catalog content
+  const qualityCounts: Record<string, number> = { '4K Ultra HD': 0, '1080p Full HD': 0, '720p HD': 0 };
+  for (const item of SEED_CONTENT) {
+    const q = item.quality || '1080p';
+    if (q.includes('4K') || q.includes('2160')) qualityCounts['4K Ultra HD']++;
+    else if (q.includes('720')) qualityCounts['720p HD']++;
+    else qualityCounts['1080p Full HD']++;
+  }
+
+  const qualityDistribution = Object.entries(qualityCounts).map(([label, value]) => ({ label, value }));
+
+  const avgCompletionRate = totalStreams > 0
+    ? `${Math.round((completedCount / totalStreams) * 100)}%`
+    : '0%';
+  const avgWatchDurationMinutes = totalStreams > 0
+    ? Math.round(totalMinutes / totalStreams)
+    : 0;
 
   return NextResponse.json({
     range,
@@ -64,10 +114,10 @@ export async function GET(request: NextRequest) {
     contentTypes: contentTypeBreakdown,
     qualities: qualityDistribution,
     summary: {
-      totalStreams: timeSeriesData.reduce((acc, cur) => acc + cur.value, 0),
-      avgCompletionRate: '78.4%',
-      avgWatchDurationMinutes: 46,
-      topProvider: 'MovieBox Daemon (Rust Engine)',
+      totalStreams,
+      avgCompletionRate,
+      avgWatchDurationMinutes,
+      topProvider: 'Sign Ultra VIP Cinema',
     },
   });
 }

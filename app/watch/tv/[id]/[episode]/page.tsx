@@ -194,7 +194,7 @@ function WatchTvContent({
     'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-6 space-y-8">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 md:px-12 py-4 sm:py-6 space-y-6 sm:space-y-8 overflow-x-hidden">
       {/* Top Header & Actions */}
       <div className="flex items-center justify-between">
         <Link
@@ -239,7 +239,7 @@ function WatchTvContent({
       </div>
 
       {/* Main HTML5 Video Player Container */}
-      <div className="w-full">
+      <div className="w-full max-w-full overflow-hidden">
         <VideoPlayer
           content={show}
           streams={streams}

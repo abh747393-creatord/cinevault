@@ -45,6 +45,9 @@ export function ConsumerFooter() {
           <Link href="/settings" className="hover:text-white transition-colors">
             Settings
           </Link>
+          <Link href="/admin/login" className="text-slate-500 hover:text-slate-300 transition-colors">
+            Admin Login
+          </Link>
         </div>
       </div>
     </footer>

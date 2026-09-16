@@ -182,6 +182,13 @@ export function VideoPlayer({
   const [hasError, setHasError] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
+  // Compute legitimate alternative streams that possess a valid playable URL
+  const validAlternativeStreams = useMemo(() => {
+    return activeStreams.filter(
+      (s, idx) => idx !== currentStreamIndex && Boolean(s?.url && s.url.trim().length > 0)
+    );
+  }, [activeStreams, currentStreamIndex]);
+
   // Audio Dubs / Multi-language state
   const availableDubs = useMemo(() => {
     const list: { id: string; label: string; language: string }[] = [];
@@ -849,9 +856,9 @@ export function VideoPlayer({
   const bufferPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
 
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full max-w-full space-y-3 overflow-hidden">
       {/* Source & Audio Track Selector Header */}
-      <div className="space-y-2.5 p-3 sm:p-3.5 bg-card/60 backdrop-blur-md border border-white/10 rounded-xl">
+      <div className="space-y-2.5 p-2.5 sm:p-3.5 bg-card/60 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden">
         {/* Source Row */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -1054,39 +1061,41 @@ export function VideoPlayer({
 
       {/* Error Overlay */}
       {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-6 text-center z-30 space-y-4">
-          <IconAlertCircle className="w-12 h-12 text-accent animate-bounce" />
-          <div>
-            <h3 className="text-xl font-bold text-white mb-1">Stream Mirror Temporarily Unavailable</h3>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-md">
-              Could not stream from current mirror. Switch to an alternative CDN mirror or quality below:
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 sm:p-6 text-center z-30 space-y-3 sm:space-y-4 overflow-y-auto max-h-full">
+          <IconAlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-accent animate-bounce flex-shrink-0" />
+          <div className="space-y-1 max-w-md">
+            <h3 className="text-base sm:text-xl font-bold text-white">Stream Temporarily Unavailable</h3>
+            <p className="text-xs sm:text-sm text-slate-400">
+              Could not load video from the current source.
             </p>
           </div>
 
-          {/* Quick Quality / Mirror Selection */}
-          {activeStreams.length > 0 && (
+          {/* Quick Quality / Mirror Selection - only if valid alternative streams exist */}
+          {validAlternativeStreams.length > 0 && (
             <div className="flex flex-wrap items-center justify-center gap-2 max-w-md">
-              {activeStreams.map((s, idx) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleQualityChange(idx)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    idx === currentStreamIndex
-                      ? 'bg-white/10 text-slate-400 border border-white/20'
-                      : 'bg-primary hover:bg-primary-hover text-white shadow-lg'
-                  }`}
-                >
-                  {s.quality} ({s.providerName || 'Mirror'})
-                </button>
-              ))}
+              <span className="text-xs text-slate-400 w-full mb-0.5 font-medium">Available qualities:</span>
+              {validAlternativeStreams.map((s) => {
+                const streamIdx = activeStreams.findIndex((item) => item.id === s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleQualityChange(streamIdx !== -1 ? streamIdx : 0)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary hover:bg-primary-hover text-white shadow-lg transition-all"
+                  >
+                    {s.quality} ({s.providerName || 'Mirror'})
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pt-1">
             {content.youtubeId && (
               <Button
                 variant="accent"
                 size="sm"
+                className="text-xs"
                 onClick={() => {
                   setHasError(false);
                   setPlayMode('trailer');
@@ -1096,20 +1105,24 @@ export function VideoPlayer({
               </Button>
             )}
 
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                const nextIdx = (currentStreamIndex + 1) % (activeStreams.length || 1);
-                handleQualityChange(nextIdx);
-              }}
-            >
-              Try Next Mirror
-            </Button>
+            {activeStreams.length > 1 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  const nextIdx = (currentStreamIndex + 1) % activeStreams.length;
+                  handleQualityChange(nextIdx);
+                }}
+              >
+                Try Another Source
+              </Button>
+            )}
 
             <Button
               variant="primary"
               size="sm"
+              className="text-xs"
               onClick={() => {
                 setHasError(false);
                 setIsLoading(true);
@@ -1186,328 +1199,330 @@ export function VideoPlayer({
       </div>
 
       {/* Player Controls Bottom Bar */}
-      <div
-        className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-3 transition-opacity duration-300 z-30 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        {/* Scrubber / Progress Bar */}
-        <div className="relative group/scrubber cursor-pointer w-full flex items-center py-1">
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            value={currentTime}
-            onChange={handleSeek}
-            className="absolute inset-0 w-full h-2 opacity-0 cursor-pointer z-10"
-            aria-label="Seek progress"
-          />
-
-          <div className="relative w-full h-1 group-hover/scrubber:h-2 bg-white/20 rounded-full overflow-hidden transition-all">
-            {/* Buffered Bar */}
-            <div
-              className="absolute left-0 top-0 bottom-0 bg-white/40"
-              style={{ width: `${bufferPercent}%` }}
+      {!hasError && (
+        <div
+          className={`absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-1.5 sm:space-y-3 transition-opacity duration-300 z-30 ${
+            showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          {/* Scrubber / Progress Bar */}
+          <div className="relative group/scrubber cursor-pointer w-full flex items-center py-1">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeek}
+              className="absolute inset-0 w-full h-2 opacity-0 cursor-pointer z-10"
+              aria-label="Seek progress"
             />
-            {/* Played Bar */}
-            <div
-              className="absolute left-0 top-0 bottom-0 bg-primary"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
 
-          {/* Thumb marker */}
-          <div
-            className="absolute w-3.5 h-3.5 bg-white rounded-full shadow-lg pointer-events-none group-hover/scrubber:scale-125 transition-transform"
-            style={{ left: `calc(${progressPercent}% - 7px)` }}
-          />
-        </div>
-
-        {/* Action Controls Toolbar */}
-        <div className="flex items-center justify-between text-white">
-          {/* Left Toolbar: Play, Skip, Time, Volume */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            {onPrevEpisode && (
-              <button
-                type="button"
-                onClick={onPrevEpisode}
-                className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                title="Previous Episode"
-                aria-label="Previous Episode"
-              >
-                <IconSkipPrevious className="w-5 h-5" />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="p-2 text-white hover:text-primary transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? (
-                <IconPause className="w-6 h-6 text-white" variant="Bold" />
-              ) : (
-                <IconPlay className="w-6 h-6 text-white" variant="Bold" />
-              )}
-            </button>
-
-            {onNextEpisode && (
-              <button
-                type="button"
-                onClick={onNextEpisode}
-                className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                title="Next Episode"
-                aria-label="Next Episode"
-              >
-                <IconSkipNext className="w-5 h-5" />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => seekDelta(-10)}
-              className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              title="Rewind 10 seconds (Left Arrow)"
-              aria-label="Rewind 10 seconds"
-            >
-              <IconBackward10Seconds className="w-5 h-5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => seekDelta(10)}
-              className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              title="Fast Forward 10 seconds (Right Arrow)"
-              aria-label="Fast Forward 10 seconds"
-            >
-              <IconForward10Seconds className="w-5 h-5" />
-            </button>
-
-            {/* Volume Slider */}
-            <div className="flex items-center gap-2 group/volume">
-              <button
-                type="button"
-                onClick={toggleMute}
-                className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                aria-label={isMuted ? 'Unmute' : 'Mute'}
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted || volume === 0 ? (
-                  <IconVolumeCross className="w-5 h-5 text-accent" />
-                ) : (
-                  <IconVolumeHigh className="w-5 h-5" />
-                )}
-              </button>
-
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-16 sm:w-24 h-1 accent-primary bg-white/20 rounded-lg cursor-pointer hidden sm:block"
-                aria-label="Volume"
+            <div className="relative w-full h-1 group-hover/scrubber:h-2 bg-white/20 rounded-full overflow-hidden transition-all">
+              {/* Buffered Bar */}
+              <div
+                className="absolute left-0 top-0 bottom-0 bg-white/40"
+                style={{ width: `${bufferPercent}%` }}
+              />
+              {/* Played Bar */}
+              <div
+                className="absolute left-0 top-0 bottom-0 bg-primary"
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
 
-            {/* Time Stamp */}
-            <div className="text-xs sm:text-sm font-medium text-slate-300 ml-1">
-              <span>{formatSeconds(currentTime)}</span>
-              <span className="mx-1 text-slate-500">/</span>
-              <span>{formatSeconds(duration)}</span>
-            </div>
+            {/* Thumb marker */}
+            <div
+              className="absolute w-3 h-3 sm:w-3.5 sm:h-3.5 bg-white rounded-full shadow-lg pointer-events-none group-hover/scrubber:scale-125 transition-transform"
+              style={{ left: `calc(${progressPercent}% - 6px)` }}
+            />
           </div>
 
-          {/* Right Toolbar: Audio Dubs, Subtitles, Speed, Settings, PiP, Fullscreen */}
-          <div className="flex items-center gap-1 sm:gap-3 relative">
-            {/* Audio Track Menu Toggle */}
-            <div className="relative">
+          {/* Action Controls Toolbar */}
+          <div className="flex items-center justify-between text-white w-full max-w-full overflow-hidden">
+            {/* Left Toolbar: Play, Skip, Time, Volume */}
+            <div className="flex items-center gap-1 sm:gap-2 md:gap-4 min-w-0 flex-shrink">
+              {onPrevEpisode && (
+                <button
+                  type="button"
+                  onClick={onPrevEpisode}
+                  className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                  title="Previous Episode"
+                  aria-label="Previous Episode"
+                >
+                  <IconSkipPrevious className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => {
-                  setShowAudioMenu(!showAudioMenu);
-                  setShowSubtitleMenu(false);
-                  setShowSettingsMenu(false);
-                }}
-                className={`p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  showAudioMenu ? 'text-emerald-400' : 'text-slate-300 hover:text-white'
-                }`}
-                title="Audio Languages"
-                aria-label="Audio Languages"
+                onClick={togglePlay}
+                className="p-1 sm:p-2 text-white hover:text-primary transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                title={isPlaying ? 'Pause' : 'Play'}
               >
-                <IconTranslate className="w-5 h-5" />
+                {isPlaying ? (
+                  <IconPause className="w-5 h-5 sm:w-6 sm:h-6 text-white" variant="Bold" />
+                ) : (
+                  <IconPlay className="w-5 h-5 sm:w-6 sm:h-6 text-white" variant="Bold" />
+                )}
               </button>
 
-              {showAudioMenu && (
-                <div className="absolute bottom-12 right-0 w-52 bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
-                  <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center gap-1.5">
-                    <IconTranslate className="w-3.5 h-3.5 text-emerald-400" />
-                    Audio Languages
-                  </div>
-                  {availableDubs.map((dub) => {
-                    const isActive = dub.id === activeDubId;
-                    return (
-                      <button
-                        key={dub.id}
-                        type="button"
-                        onClick={() => handleAudioDubChange(dub.id, dub.label)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
-                          isActive ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
-                        }`}
-                      >
-                        <span>{dub.label}</span>
-                        {isActive && <IconCheck className="w-3.5 h-3.5" />}
-                      </button>
-                    );
-                  })}
-                </div>
+              {onNextEpisode && (
+                <button
+                  type="button"
+                  onClick={onNextEpisode}
+                  className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                  title="Next Episode"
+                  aria-label="Next Episode"
+                >
+                  <IconSkipNext className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => seekDelta(-10)}
+                className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                title="Rewind 10 seconds (Left Arrow)"
+                aria-label="Rewind 10 seconds"
+              >
+                <IconBackward10Seconds className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => seekDelta(10)}
+                className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                title="Fast Forward 10 seconds (Right Arrow)"
+                aria-label="Fast Forward 10 seconds"
+              >
+                <IconForward10Seconds className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Volume Slider */}
+              <div className="flex items-center gap-1 sm:gap-2 group/volume flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  aria-label={isMuted ? 'Unmute' : 'Mute'}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted || volume === 0 ? (
+                    <IconVolumeCross className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
+                  ) : (
+                    <IconVolumeHigh className="w-4 h-4 sm:w-5 sm:h-5" />
+                  )}
+                </button>
+
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  className="w-14 sm:w-20 md:w-24 h-1 accent-primary bg-white/20 rounded-lg cursor-pointer hidden md:block"
+                  aria-label="Volume"
+                />
+              </div>
+
+              {/* Time Stamp */}
+              <div className="text-[10px] sm:text-xs md:text-sm font-medium text-slate-300 whitespace-nowrap ml-0.5 sm:ml-1">
+                <span>{formatSeconds(currentTime)}</span>
+                <span className="mx-0.5 sm:mx-1 text-slate-500">/</span>
+                <span>{formatSeconds(duration)}</span>
+              </div>
             </div>
 
-            {/* Subtitles Menu Toggle */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSubtitleMenu(!showSubtitleMenu);
-                  setShowAudioMenu(false);
-                  setShowSettingsMenu(false);
-                }}
-                className={`p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  activeSubtitle !== 'off' ? 'text-primary' : 'text-slate-300 hover:text-white'
-                }`}
-                title="Subtitles"
-                aria-label="Subtitles"
-              >
-                <IconSubtitle className="w-5 h-5" />
-              </button>
+            {/* Right Toolbar: Audio Dubs, Subtitles, Speed, Settings, PiP, Fullscreen */}
+            <div className="flex items-center gap-0.5 sm:gap-1.5 md:gap-3 flex-shrink-0 relative">
+              {/* Audio Track Menu Toggle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAudioMenu(!showAudioMenu);
+                    setShowSubtitleMenu(false);
+                    setShowSettingsMenu(false);
+                  }}
+                  className={`p-1 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 ${
+                    showAudioMenu ? 'text-emerald-400' : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Audio Languages"
+                  aria-label="Audio Languages"
+                >
+                  <IconTranslate className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
 
-              {showSubtitleMenu && (
-                <div className="absolute bottom-12 right-0 w-48 bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
-                  <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center justify-between">
-                    <span>Subtitles</span>
-                    <IconSubtitle className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleSubtitleChange('off')}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
-                      activeSubtitle === 'off' ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
-                    }`}
-                  >
-                    <span>Off</span>
-                    {activeSubtitle === 'off' && <IconCheck className="w-3.5 h-3.5" />}
-                  </button>
-                  {currentStream?.subtitles?.map((sub) => {
-                    const isActive = activeSubtitle === sub.id;
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => handleSubtitleChange(sub.id)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
-                          isActive ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
-                        }`}
-                      >
-                        <span className="truncate mr-1">{sub.label}</span>
-                        {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Settings Menu Toggle (Speed, Quality) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSettingsMenu(!showSettingsMenu);
-                  setShowSubtitleMenu(false);
-                  setShowAudioMenu(false);
-                }}
-                className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                title="Playback Settings"
-                aria-label="Playback Settings"
-              >
-                <IconSettings className="w-5 h-5" />
-              </button>
-
-              {showSettingsMenu && (
-                <div className="absolute bottom-12 right-0 w-56 bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs">
-                  {/* Quality selector */}
-                  <div>
-                    <div className="font-bold text-slate-300 mb-1.5">Quality</div>
-                    <div className="grid grid-cols-3 gap-1">
-                      {activeStreams.map((s, idx) => (
+                {showAudioMenu && (
+                  <div className="absolute bottom-12 right-0 w-48 sm:w-52 max-w-[calc(100vw-2rem)] max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
+                    <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center gap-1.5">
+                      <IconTranslate className="w-3.5 h-3.5 text-emerald-400" />
+                      Audio Languages
+                    </div>
+                    {availableDubs.map((dub) => {
+                      const isActive = dub.id === activeDubId;
+                      return (
                         <button
-                          key={s.id}
+                          key={dub.id}
                           type="button"
-                          onClick={() => handleQualityChange(idx)}
-                          className={`py-1 px-1.5 rounded text-center font-medium ${
-                            idx === currentStreamIndex
-                              ? 'bg-primary text-white font-bold'
-                              : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                          onClick={() => handleAudioDubChange(dub.id, dub.label)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
+                            isActive ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                           }`}
                         >
-                          {s.quality}
+                          <span className="truncate mr-1">{dub.label}</span>
+                          {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
+                )}
+              </div>
 
-                  {/* Playback speed selector */}
-                  <div>
-                    <div className="font-bold text-slate-300 mb-1.5">Speed</div>
-                    <div className="grid grid-cols-4 gap-1">
-                      {[0.75, 1, 1.25, 1.5, 2].map((sp) => (
+              {/* Subtitles Menu Toggle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubtitleMenu(!showSubtitleMenu);
+                    setShowAudioMenu(false);
+                    setShowSettingsMenu(false);
+                  }}
+                  className={`p-1 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 ${
+                    activeSubtitle !== 'off' ? 'text-primary' : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Subtitles"
+                  aria-label="Subtitles"
+                >
+                  <IconSubtitle className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+
+                {showSubtitleMenu && (
+                  <div className="absolute bottom-12 right-0 w-44 sm:w-48 max-w-[calc(100vw-2rem)] max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
+                    <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center justify-between">
+                      <span>Subtitles</span>
+                      <IconSubtitle className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSubtitleChange('off')}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
+                        activeSubtitle === 'off' ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                      }`}
+                    >
+                      <span>Off</span>
+                      {activeSubtitle === 'off' && <IconCheck className="w-3.5 h-3.5" />}
+                    </button>
+                    {currentStream?.subtitles?.map((sub) => {
+                      const isActive = activeSubtitle === sub.id;
+                      return (
                         <button
-                          key={sp}
+                          key={sub.id}
                           type="button"
-                          onClick={() => handleSpeedChange(sp)}
-                          className={`py-1 px-1 rounded text-center font-medium ${
-                            playbackSpeed === sp
-                              ? 'bg-primary text-white font-bold'
-                              : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                          onClick={() => handleSubtitleChange(sub.id)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
+                            isActive ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                           }`}
                         >
-                          {sp}x
+                          <span className="truncate mr-1">{sub.label}</span>
+                          {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
                         </button>
-                      ))}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Settings Menu Toggle (Speed, Quality) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettingsMenu(!showSettingsMenu);
+                    setShowSubtitleMenu(false);
+                    setShowAudioMenu(false);
+                  }}
+                  className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                  title="Playback Settings"
+                  aria-label="Playback Settings"
+                >
+                  <IconSettings className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+
+                {showSettingsMenu && (
+                  <div className="absolute bottom-12 right-0 w-52 sm:w-56 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs">
+                    {/* Quality selector */}
+                    <div>
+                      <div className="font-bold text-slate-300 mb-1.5">Quality</div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {activeStreams.map((s, idx) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => handleQualityChange(idx)}
+                            className={`py-1 px-1.5 rounded text-center font-medium ${
+                              idx === currentStreamIndex
+                                ? 'bg-primary text-white font-bold'
+                                : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            {s.quality}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Playback speed selector */}
+                    <div>
+                      <div className="font-bold text-slate-300 mb-1.5">Speed</div>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[0.75, 1, 1.25, 1.5, 2].map((sp) => (
+                          <button
+                            key={sp}
+                            type="button"
+                            onClick={() => handleSpeedChange(sp)}
+                            className={`py-1 px-1 rounded text-center font-medium ${
+                              playbackSpeed === sp
+                                ? 'bg-primary text-white font-bold'
+                                : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            {sp}x
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Picture in Picture */}
+              <button
+                type="button"
+                onClick={togglePiP}
+                className="p-1 sm:p-2 text-slate-300 hover:text-white hidden sm:block rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                title="Picture in Picture"
+                aria-label="Picture in Picture"
+              >
+                <IconPIP className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Fullscreen Toggle */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                title="Fullscreen (F)"
+                aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? <IconQuitFullScreen className="w-4 h-4 sm:w-5 sm:h-5" /> : <IconFullScreen className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
             </div>
-
-            {/* Picture in Picture */}
-            <button
-              type="button"
-              onClick={togglePiP}
-              className="p-2 text-slate-300 hover:text-white hidden sm:block rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              title="Picture in Picture"
-              aria-label="Picture in Picture"
-            >
-              <IconPIP className="w-5 h-5" />
-            </button>
-
-            {/* Fullscreen Toggle */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-              title="Fullscreen (F)"
-              aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            >
-              {isFullscreen ? <IconQuitFullScreen className="w-5 h-5" /> : <IconFullScreen className="w-5 h-5" />}
-            </button>
           </div>
         </div>
-      </div>
+      )}
           </>
         )}
       </div>

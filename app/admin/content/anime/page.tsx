@@ -16,6 +16,7 @@ import { AdminPagination } from '@/components/admin/admin-pagination';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { Button } from '@/components/ui/button';
 import { ContentItem } from '@/types/content';
+import { adminFetch } from '@/lib/api/admin-fetch';
 
 export default function AdminAnimeCatalogPage() {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -34,9 +35,7 @@ export default function AdminAnimeCatalogPage() {
         search: searchQuery,
         type: 'anime',
       });
-      const res = await fetch(`/api/admin/content?${params}`, {
-        headers: { 'x-admin-role': 'admin' },
-      });
+      const res = await adminFetch(`/api/admin/content?${params}`);
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);

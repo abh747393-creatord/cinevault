@@ -7,9 +7,9 @@ import { getEnrichedEpisode } from '@/lib/data/episode-metadata';
 import { SAMPLE_SUBTITLES } from '@/lib/data/catalog-seed';
 
 export class MovieBoxProvider implements ContentProvider {
-  id = 'provider-moviebox';
-  name = 'CineVault Ultra Network';
-  slug = 'moviebox';
+  id = 'provider-sign-ultra-vip';
+  name = 'Sign Ultra VIP Cinema';
+  slug = 'sign-ultra-vip';
   enabled = true;
   priority = 0; // Highest priority
 

@@ -19,14 +19,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let totalUsers = 1;
+    let totalUsers = 1; // At least the administrator
     let activeUsers = 1;
     let totalContent = SEED_CONTENT.length;
     let moviesCount = SEED_CONTENT.filter((c) => c.contentType === 'movie').length;
     let tvCount = SEED_CONTENT.filter((c) => c.contentType === 'tv').length;
     let animeCount = SEED_CONTENT.filter((c) => c.contentType === 'anime').length;
-    let totalWatchSessions = 42;
-    let totalWatchMinutes = 3450;
+    let totalWatchSessions = 0;
+    let totalWatchMinutes = 0;
     let recentSessions: any[] = [];
 
     const supabase = getAdminClient() || getServerClient();
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         .select('*', { count: 'exact', head: true });
       if (!uErr && typeof uCount === 'number') {
         totalUsers = Math.max(uCount, 1);
-        activeUsers = Math.max(Math.round(totalUsers * 0.75), 1);
+        activeUsers = Math.max(uCount, 1);
       }
 
       // 2. Content counts from database if populated
@@ -88,7 +88,6 @@ export async function GET(request: NextRequest) {
         users: {
           total: totalUsers,
           active: activeUsers,
-          trend: { value: 12, isPositive: true },
         },
         content: {
           total: totalContent,
@@ -101,7 +100,6 @@ export async function GET(request: NextRequest) {
           totalSessions: totalWatchSessions,
           totalWatchMinutes,
           totalWatchHours: (totalWatchMinutes / 60).toFixed(1),
-          trend: { value: 18, isPositive: true },
         },
         providers: {
           total: providers.length,
