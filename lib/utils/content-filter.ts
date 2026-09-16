@@ -270,17 +270,36 @@ export function deduplicateAndCleanCatalog<
  */
 export function isAdultContent(item: {
   ageRating?: string;
+  adult?: boolean;
   genres?: { name?: string; slug?: string }[];
 }): boolean {
   if (!item) return false;
 
-  // 1. Explicit 18+ Age rating / certification checks
-  const adultRatings = ['18+', 'NC-17', 'TV-MA', 'R18', 'ADULT', 'X', 'XXX'];
-  if (item.ageRating && adultRatings.includes(item.ageRating.toUpperCase().trim())) {
+  // 1. Explicit adult boolean flag (e.g. from TMDB or database)
+  if (item.adult === true) {
     return true;
   }
 
-  // 2. Explicit adult / erotica genre checks
+  // 2. Explicit mature / adult age rating or certification checks
+  // Includes standard MPAA R & NC-17, TV-MA, international 18+, and CBFC A
+  const matureRatings = [
+    'R',
+    'NC-17',
+    'TV-MA',
+    '18+',
+    '18',
+    'R18',
+    'R-18',
+    'A', // India CBFC Adults Only (18+)
+    'ADULT',
+    'X',
+    'XXX',
+  ];
+  if (item.ageRating && matureRatings.includes(item.ageRating.toUpperCase().trim())) {
+    return true;
+  }
+
+  // 3. Explicit adult / erotica genre checks
   if (item.genres && Array.isArray(item.genres)) {
     const isAdultGenre = item.genres.some((g) => {
       const slug = (g?.slug || '').toLowerCase().trim();

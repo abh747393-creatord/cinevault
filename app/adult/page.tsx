@@ -1,20 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { IconShield } from '@/components/ui/icons';
+import { IconShield, IconClapperboard, IconTV, IconShieldWarning } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { Button } from '@/components/ui/button';
 import { ContentItem } from '@/types/content';
 import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { isAdultContent } from '@/lib/utils/content-filter';
 
+type TabType = 'all' | 'movies' | 'tv';
+
 export default function AdultPage() {
   const router = useRouter();
   const [isAgeVerified, setIsAgeVerified] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [adultItems, setAdultItems] = useState<ContentItem[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('all');
 
   // Check age verification status on mount from local browser session
   useEffect(() => {
@@ -26,17 +29,16 @@ export default function AdultPage() {
     }
   }, []);
 
-  // Filter catalog strictly based on available metadata
+  // Filter catalog strictly based on verified metadata
   useEffect(() => {
     if (!isAgeVerified) return;
 
     let isMounted = true;
     setLoading(true);
 
-    // Inspect available seed catalog and provider metadata
+    // Retrieve verified adult/mature items from seed catalog
     const verifiedSeedAdults = SEED_CONTENT.filter(isAdultContent);
 
-    // Under real MovieBox metadata, adult classification is not provided (defaults to PG-13)
     if (isMounted) {
       setAdultItems(verifiedSeedAdults);
       setLoading(false);
@@ -46,6 +48,20 @@ export default function AdultPage() {
       isMounted = false;
     };
   }, [isAgeVerified]);
+
+  const movies = useMemo(() => {
+    return adultItems.filter((item) => item.contentType === 'movie');
+  }, [adultItems]);
+
+  const tvShows = useMemo(() => {
+    return adultItems.filter((item) => item.contentType === 'tv' || item.contentType === 'anime');
+  }, [adultItems]);
+
+  const displayedItems = useMemo(() => {
+    if (activeTab === 'movies') return movies;
+    if (activeTab === 'tv') return tvShows;
+    return adultItems;
+  }, [activeTab, movies, tvShows, adultItems]);
 
   const handleConfirmAge = () => {
     try {
@@ -71,7 +87,7 @@ export default function AdultPage() {
     );
   }
 
-  // 18+ Age Gate
+  // 18+ Age Gate Modal
   if (!isAgeVerified) {
     return (
       <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
@@ -100,7 +116,7 @@ export default function AdultPage() {
               variant="primary"
               size="md"
               onClick={handleConfirmAge}
-              className="w-full sm:w-auto text-xs font-bold px-6 py-2.5 shadow-lg shadow-primary/25"
+              className="w-full sm:auto text-xs font-bold px-6 py-2.5 shadow-lg shadow-primary/25"
             >
               I&apos;m 18+
             </Button>
@@ -126,18 +142,68 @@ export default function AdultPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full select-none">
       {/* Page Header */}
-      <div className="mb-8 space-y-2">
+      <div className="mb-6 space-y-2">
         <div className="flex items-center gap-3">
           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wider bg-red-500/10 border border-red-500/30 text-red-400 uppercase">
             18+ Restricted
+          </span>
+          <span className="text-xs text-slate-400">
+            Isolated Content Catalog
           </span>
         </div>
         <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
           18+ Adult
         </h1>
-        <p className="text-sm sm:text-base text-slate-400">
-          Mature content for adult viewers.
+        <p className="text-sm sm:text-base text-slate-400 max-w-2xl">
+          Verified mature titles for adult viewers based on official MPAA &apos;R&apos;, NC-17, and TV-MA certifications.
         </p>
+      </div>
+
+      {/* Tabs Filter Bar */}
+      <div className="flex items-center gap-2 mb-6 border-b border-white/10 pb-4 overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === 'all'
+              ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          <span>All</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/40 text-slate-300">
+            {adultItems.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('movies')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === 'movies'
+              ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          <IconClapperboard className="w-4 h-4" />
+          <span>Movies</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/40 text-slate-300">
+            {movies.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tv')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === 'tv'
+              ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          <IconTV className="w-4 h-4" />
+          <span>TV Shows</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/40 text-slate-300">
+            {tvShows.length}
+          </span>
+        </button>
       </div>
 
       {/* Catalog Display */}
@@ -145,14 +211,44 @@ export default function AdultPage() {
         <div className="min-h-[40vh] flex items-center justify-center">
           <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : adultItems.length > 0 ? (
+      ) : activeTab === 'tv' && tvShows.length === 0 ? (
+        /* Truthful provider limitation notice for TV Shows */
+        <div className="min-h-[40vh] flex flex-col items-center justify-center p-8 rounded-3xl bg-card/40 border border-white/5 text-center space-y-4 max-w-xl mx-auto">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <IconShieldWarning className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-base sm:text-lg font-bold text-white">
+              No verified 18+ TV shows available right now.
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              The current provider does not expose enough reliable age-rating metadata to safely populate TV shows in this section.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setActiveTab('movies')}
+              className="text-xs font-semibold"
+            >
+              View Verified Movies ({movies.length})
+            </Button>
+            <Link href="/">
+              <Button variant="secondary" size="sm" className="text-xs font-semibold">
+                Return to Home
+              </Button>
+            </Link>
+          </div>
+        </div>
+      ) : displayedItems.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
-          {adultItems.map((item) => (
+          {displayedItems.map((item) => (
             <ContentCard key={item.id} content={item} />
           ))}
         </div>
       ) : (
-        <div className="min-h-[45vh] flex flex-col items-center justify-center p-8 rounded-3xl bg-card/40 border border-white/5 text-center space-y-4">
+        <div className="min-h-[40vh] flex flex-col items-center justify-center p-8 rounded-3xl bg-card/40 border border-white/5 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400">
             <IconShield className="w-7 h-7 text-slate-500" />
           </div>
