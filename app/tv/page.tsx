@@ -8,7 +8,6 @@ import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
-import { isAdultContent } from '@/lib/utils/content-filter';
 
 let cachedLiveTv: ContentItem[] | null = null;
 
@@ -58,8 +57,8 @@ export default function TvShowsPage() {
   }, []);
 
   const filteredTv = useMemo(() => {
-    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'tv' && !isAdultContent(c));
-    let list = liveTv.length > 0 ? [...liveTv, ...seedList].filter((c) => !isAdultContent(c)) : seedList;
+    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'tv');
+    let list = liveTv.length > 0 ? [...liveTv, ...seedList] : seedList;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();

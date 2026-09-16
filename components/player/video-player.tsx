@@ -102,6 +102,72 @@ async function fetchSubtitleText(src: string): Promise<string> {
   return await res.text();
 }
 
+function formatLanguageCode(langCode?: string): string {
+  if (!langCode) return 'Original Audio';
+  const clean = langCode.toLowerCase().trim();
+  const map: Record<string, string> = {
+    en: 'English',
+    eng: 'English',
+    hi: 'Hindi',
+    hin: 'Hindi',
+    ta: 'Tamil',
+    tam: 'Tamil',
+    te: 'Telugu',
+    tel: 'Telugu',
+    es: 'Spanish',
+    spa: 'Spanish',
+    fr: 'French',
+    fra: 'French',
+    fre: 'French',
+    de: 'German',
+    deu: 'German',
+    ger: 'German',
+    ja: 'Japanese',
+    jpn: 'Japanese',
+    ko: 'Korean',
+    kor: 'Korean',
+    zh: 'Chinese',
+    zho: 'Chinese',
+    chi: 'Chinese',
+    it: 'Italian',
+    ita: 'Italian',
+    pt: 'Portuguese',
+    por: 'Portuguese',
+    ru: 'Russian',
+    rus: 'Russian',
+    ar: 'Arabic',
+    ara: 'Arabic',
+    tr: 'Turkish',
+    tur: 'Turkish',
+    ml: 'Malayalam',
+    mal: 'Malayalam',
+    kn: 'Kannada',
+    kan: 'Kannada',
+    bn: 'Bengali',
+    ben: 'Bengali',
+    und: 'Original Audio',
+  };
+  return map[clean] || (clean.length === 2 || clean.length === 3 ? clean.toUpperCase() : clean);
+}
+
+export interface UnifiedAudioTrack {
+  id: string;
+  label: string;
+  language: string;
+  type: 'dash' | 'dub' | 'stream' | 'default';
+  dashTrack?: any;
+  dubSubjectId?: string;
+}
+
+export interface UnifiedSubtitleTrack {
+  id: string;
+  label: string;
+  language: string;
+  type: 'dash' | 'vtt';
+  src?: string;
+  dashTrackIndex?: number;
+}
+
 interface VideoPlayerProps {
   content: ContentItem;
   streams: StreamSource[];
@@ -198,53 +264,138 @@ export function VideoPlayer({
     return false;
   }, [playMode, hasError, activeStreams, currentStream]);
 
-  // Audio Dubs / Multi-language state
-  const availableDubs = useMemo(() => {
-    const list: { id: string; label: string; language: string }[] = [];
+  // DASH in-manifest tracks discovered directly from MediaPlayer
+  const [dashAudioTracks, setDashAudioTracks] = useState<any[]>([]);
+  const [currentDashAudioTrack, setCurrentDashAudioTrack] = useState<any>(null);
+  const [dashTextTracks, setDashTextTracks] = useState<any[]>([]);
+
+  // Unified Audio Tracks (DASH adaptation sets + Stream metadata + Provider dubs)
+  const allAudioTracks = useMemo<UnifiedAudioTrack[]>(() => {
+    const list: UnifiedAudioTrack[] = [];
     const seen = new Set<string>();
 
-    if (content.dubs && content.dubs.length > 0) {
-      for (const d of content.dubs) {
-        if (!seen.has(d.subject_id)) {
-          seen.add(d.subject_id);
+    // 1. Real in-stream DASH audio tracks (highest fidelity, direct MSE switching without reload)
+    if (dashAudioTracks && dashAudioTracks.length > 0) {
+      for (const t of dashAudioTracks) {
+        const id = `dash-audio-${t.index}`;
+        if (!seen.has(id)) {
+          seen.add(id);
+          const lang = t.lang || 'und';
+          let labelText = '';
+          if (typeof t.labels?.[0] === 'string') {
+            labelText = t.labels[0];
+          } else if (t.labels?.[0]?.text) {
+            labelText = t.labels[0].text;
+          } else if (lang === 'und' && dashAudioTracks.length === 1) {
+            labelText = 'Original Audio';
+          } else {
+            const formatted = formatLanguageCode(lang);
+            labelText = formatted === 'English' ? 'English (Original)' : `${formatted} Dub`;
+          }
+
           list.push({
-            id: d.subject_id,
-            label: d.label || d.language,
-            language: d.language,
+            id,
+            label: labelText,
+            language: lang,
+            type: 'dash',
+            dashTrack: t,
           });
         }
       }
     }
 
-    if (currentStream?.audioTracks && currentStream.audioTracks.length > 0) {
+    // 2. Stream metadata audio tracks (if present from API)
+    if (list.length === 0 && currentStream?.audioTracks && currentStream.audioTracks.length > 0) {
       for (const a of currentStream.audioTracks) {
         if (!seen.has(a.id)) {
           seen.add(a.id);
           list.push({
             id: a.id,
-            label: a.label || a.language,
+            label: a.label || formatLanguageCode(a.language),
             language: a.language,
+            type: 'stream',
           });
         }
       }
     }
 
+    // 3. MovieBox external dub subjects (if content has alternate audio releases)
+    if (content.dubs && content.dubs.length > 0) {
+      for (const d of content.dubs) {
+        const dubKey = `dub-${d.subject_id}`;
+        if (!seen.has(dubKey)) {
+          seen.add(dubKey);
+          list.push({
+            id: dubKey,
+            label: d.label || `${formatLanguageCode(d.language)} Dub`,
+            language: d.language,
+            type: 'dub',
+            dubSubjectId: d.subject_id,
+          });
+        }
+      }
+    }
+
+    // 4. Guaranteed fallback when single audio stream
     if (list.length === 0) {
-      const rawId = content.id.replace(/^mb-/, '');
       list.push({
-        id: rawId || 'default',
+        id: 'default-audio',
         label: 'Original Audio',
         language: 'en',
+        type: 'default',
       });
     }
 
     return list;
-  }, [content.dubs, content.id, currentStream?.audioTracks]);
+  }, [dashAudioTracks, currentStream?.audioTracks, content.dubs]);
 
-  const [activeDubId, setActiveDubId] = useState<string>(() => {
-    const rawId = content.id.replace(/^mb-/, '');
-    return rawId || availableDubs[0]?.id || 'default';
-  });
+  const [activeAudioId, setActiveAudioId] = useState<string>('default-audio');
+
+  // Unified Subtitle Tracks (In-band DASH text tracks + External VTT subtitles)
+  const allSubtitleTracks = useMemo<UnifiedSubtitleTrack[]>(() => {
+    const list: UnifiedSubtitleTrack[] = [];
+    const seen = new Set<string>();
+
+    // 1. In-band DASH text tracks
+    if (dashTextTracks && dashTextTracks.length > 0) {
+      for (const t of dashTextTracks) {
+        const id = `dash-text-${t.index}`;
+        if (!seen.has(id)) {
+          seen.add(id);
+          const lang = t.lang || 'en';
+          const labelText =
+            typeof t.labels?.[0] === 'string'
+              ? t.labels[0]
+              : t.labels?.[0]?.text || formatLanguageCode(lang);
+          list.push({
+            id,
+            label: labelText,
+            language: lang,
+            type: 'dash',
+            dashTrackIndex: t.index,
+          });
+        }
+      }
+    }
+
+    // 2. External VTT subtitles from current stream
+    if (currentStream?.subtitles && currentStream.subtitles.length > 0) {
+      for (const s of currentStream.subtitles) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          list.push({
+            id: s.id,
+            label: s.label || formatLanguageCode(s.language),
+            language: s.language,
+            type: 'vtt',
+            src: s.src,
+          });
+        }
+      }
+    }
+
+    return list;
+  }, [dashTextTracks, currentStream?.subtitles]);
 
   const [isSwitchingAudio, setIsSwitchingAudio] = useState(false);
   const [audioNotification, setAudioNotification] = useState<string | null>(null);
@@ -269,18 +420,36 @@ export function VideoPlayer({
     subtitleCuesRef.current = subtitleCues;
   }, [subtitleCues]);
 
+  // Keep activeAudioId in sync with DASH current track or active dub
+  useEffect(() => {
+    if (currentDashAudioTrack) {
+      setActiveAudioId(`dash-audio-${currentDashAudioTrack.index}`);
+    } else if (allAudioTracks.length > 0 && !allAudioTracks.some((t) => t.id === activeAudioId)) {
+      setActiveAudioId(allAudioTracks[0].id);
+    }
+  }, [currentDashAudioTrack, allAudioTracks, activeAudioId]);
+
+  // Clear auto-hide controls timer while any dropdown menu is actively open
+  useEffect(() => {
+    if (showAudioMenu || showSubtitleMenu || showSettingsMenu) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = null;
+      }
+    }
+  }, [showAudioMenu, showSubtitleMenu, showSettingsMenu]);
 
   // Fetch and parse subtitle cues whenever activeSubtitle changes or stream changes
   useEffect(() => {
-    if (activeSubtitle === 'off' || !currentStream?.subtitles || currentStream.subtitles.length === 0) {
+    if (activeSubtitle === 'off') {
       setSubtitleCues([]);
       setActiveCueText(null);
       activeCueTextRef.current = null;
       return;
     }
 
-    const subTrack = currentStream.subtitles.find((s) => s.id === activeSubtitle);
-    if (!subTrack || !subTrack.src) {
+    const vttTrack = allSubtitleTracks.find((s) => s.id === activeSubtitle && s.type === 'vtt');
+    if (!vttTrack || !vttTrack.src) {
       setSubtitleCues([]);
       setActiveCueText(null);
       activeCueTextRef.current = null;
@@ -288,7 +457,7 @@ export function VideoPlayer({
     }
 
     let isMounted = true;
-    fetchSubtitleText(subTrack.src)
+    fetchSubtitleText(vttTrack.src)
       .then((raw) => {
         if (!isMounted) return;
         const cues = parseSubtitleText(raw);
@@ -306,7 +475,7 @@ export function VideoPlayer({
     return () => {
       isMounted = false;
     };
-  }, [activeSubtitle, currentStream?.subtitles]);
+  }, [activeSubtitle, allSubtitleTracks]);
 
   // Pause HTML5 video playback when switched to trailer mode
   useEffect(() => {
@@ -359,9 +528,6 @@ export function VideoPlayer({
 
   // Switch Audio Dub / Language (fetches MovieBox streams for target audio track)
   const handleAudioDubChange = async (dubId: string, dubLabel: string) => {
-    if (dubId === activeDubId || isSwitchingAudio) return;
-
-    setActiveDubId(dubId);
     setIsSwitchingAudio(true);
     setAudioNotification(`Switching audio to ${dubLabel}...`);
     setShowAudioMenu(false);
@@ -398,6 +564,32 @@ export function VideoPlayer({
       setIsSwitchingAudio(false);
       setTimeout(() => setAudioNotification(null), 3000);
     }
+  };
+
+  // Unified Audio track switcher (switches in-stream DASH AdaptationSet immediately or fetches alternate dub release)
+  const handleSelectAudioTrack = async (track: UnifiedAudioTrack) => {
+    if (track.type === 'dash' && track.dashTrack && dashPlayerRef.current) {
+      try {
+        dashPlayerRef.current.setCurrentTrack(track.dashTrack);
+        setCurrentDashAudioTrack(track.dashTrack);
+        setActiveAudioId(track.id);
+        setAudioNotification(`Audio: ${track.label}`);
+        setTimeout(() => setAudioNotification(null), 3000);
+      } catch (err) {
+        console.warn('[VideoPlayer] DASH track switch failed:', err);
+      }
+      setShowAudioMenu(false);
+      return;
+    }
+
+    if (track.type === 'dub' && track.dubSubjectId) {
+      setActiveAudioId(track.id);
+      await handleAudioDubChange(track.dubSubjectId, track.label);
+      return;
+    }
+
+    setActiveAudioId(track.id);
+    setShowAudioMenu(false);
   };
 
   // Initialize dash.js for MPEG-DASH streams or native HTML5 for direct files
@@ -472,6 +664,23 @@ export function VideoPlayer({
 
           player.initialize(videoElement, streamUrl, false);
 
+          const updateTracksFromPlayer = () => {
+            try {
+              const aTracks = player.getTracksFor('audio');
+              if (aTracks && aTracks.length > 0) {
+                setDashAudioTracks(aTracks);
+                const currA = player.getCurrentTrackFor('audio');
+                if (currA) setCurrentDashAudioTrack(currA);
+              }
+            } catch {}
+            try {
+              const tTracks = player.getTracksFor('text');
+              if (tTracks && tTracks.length > 0) {
+                setDashTextTracks(tTracks);
+              }
+            } catch {}
+          };
+
           player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
             console.warn('Dash.js error:', e);
             handleVideoError();
@@ -486,11 +695,13 @@ export function VideoPlayer({
                 handleVideoError();
               }
             } catch {}
+            updateTracksFromPlayer();
           });
 
           player.on(dashjs.MediaPlayer.events.CAN_PLAY, () => {
             setIsLoading(false);
             setHasError(false);
+            updateTracksFromPlayer();
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, () => {
@@ -513,6 +724,7 @@ export function VideoPlayer({
               }
             }
             setIsLoading(false);
+            updateTracksFromPlayer();
           });
 
           dashPlayerRef.current = player;
@@ -531,6 +743,9 @@ export function VideoPlayer({
 
     return () => {
       isCancelled = true;
+      setDashAudioTracks([]);
+      setCurrentDashAudioTrack(null);
+      setDashTextTracks([]);
       if (dashPlayerRef.current) {
         try {
           dashPlayerRef.current.reset();
@@ -645,13 +860,12 @@ export function VideoPlayer({
       setShowControls(false);
       return;
     }
-    setShowControls((prev) => (prev ? prev : true));
+    setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    if (isPlaying) {
+    // Only auto-hide controls if no dropdown menus are actively open
+    if (isPlaying && !showAudioMenu && !showSubtitleMenu && !showSettingsMenu) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
-        setShowSettingsMenu(false);
-        setShowSubtitleMenu(false);
       }, 3500);
     }
   };
@@ -670,6 +884,16 @@ export function VideoPlayer({
       setIsPlaying(false);
       syncProgress(video.currentTime, video.duration);
     }
+  };
+
+  const handleVideoClick = () => {
+    if (showAudioMenu || showSubtitleMenu || showSettingsMenu) {
+      setShowAudioMenu(false);
+      setShowSubtitleMenu(false);
+      setShowSettingsMenu(false);
+      return;
+    }
+    togglePlay();
   };
 
   const seekDelta = (seconds: number) => {
@@ -821,21 +1045,63 @@ export function VideoPlayer({
   };
 
   const handleSubtitleChange = (subId: string) => {
-    const video = videoRef.current;
-    if (video) {
-      for (let i = 0; i < video.textTracks.length; i++) {
-        const track = video.textTracks[i];
-        if (subId === 'off') {
-          track.mode = 'disabled';
-        } else if (track.id === subId || track.language === subId) {
-          track.mode = 'hidden';
-        } else {
-          track.mode = 'disabled';
+    if (subId === 'off') {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.setTextTrack(-1);
+        } catch {}
+      }
+      const video = videoRef.current;
+      if (video) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = 'disabled';
         }
       }
+      setActiveSubtitle('off');
+      setSubtitleCues([]);
+      setActiveCueText(null);
+      activeCueTextRef.current = null;
+      setShowSubtitleMenu(false);
+      return;
     }
-    setActiveSubtitle(subId);
-    setShowSubtitleMenu(false);
+
+    const match = allSubtitleTracks.find((t) => t.id === subId);
+    if (!match) {
+      setActiveSubtitle('off');
+      setShowSubtitleMenu(false);
+      return;
+    }
+
+    if (match.type === 'dash' && typeof match.dashTrackIndex === 'number' && dashPlayerRef.current) {
+      try {
+        dashPlayerRef.current.setTextTrack(match.dashTrackIndex);
+      } catch {}
+      setActiveSubtitle(match.id);
+      setShowSubtitleMenu(false);
+      return;
+    }
+
+    if (match.type === 'vtt') {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.setTextTrack(-1);
+        } catch {}
+      }
+      const video = videoRef.current;
+      if (video) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          const track = video.textTracks[i];
+          if (track.id === match.id || track.language === match.language) {
+            track.mode = 'hidden';
+          } else {
+            track.mode = 'disabled';
+          }
+        }
+      }
+      setActiveSubtitle(match.id);
+      setShowSubtitleMenu(false);
+      return;
+    }
   };
 
   const handleTimeUpdate = () => {
@@ -946,19 +1212,19 @@ export function VideoPlayer({
         </div>
 
         {/* Audio Track / Dubs Row */}
-        {availableDubs.length > 0 && (
+        {allAudioTracks.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mr-1">
               <IconTranslate className="w-3.5 h-3.5 text-emerald-400" />
               Audio Track:
             </span>
 
-            {availableDubs.map((dub) => {
-              const isActive = dub.id === activeDubId;
+            {allAudioTracks.map((track) => {
+              const isActive = track.id === activeAudioId;
               return (
                 <button
-                  key={dub.id}
-                  onClick={() => handleAudioDubChange(dub.id, dub.label)}
+                  key={track.id}
+                  onClick={() => handleSelectAudioTrack(track)}
                   disabled={isSwitchingAudio}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     isActive
@@ -967,7 +1233,7 @@ export function VideoPlayer({
                   }`}
                 >
                   {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  {dub.label}
+                  {track.label}
                 </button>
               );
             })}
@@ -1111,7 +1377,7 @@ export function VideoPlayer({
                   WebkitTransform: 'translateZ(0)',
                   outline: 'none',
                 }}
-                onClick={togglePlay}
+                onClick={handleVideoClick}
                 onTimeUpdate={handleTimeUpdate}
                 onWaiting={() => setIsLoading(true)}
                 onPlaying={handleVideoPlaying}
@@ -1244,7 +1510,7 @@ export function VideoPlayer({
           </div>
 
           {/* Action Controls Toolbar */}
-          <div className="flex items-center justify-between text-white w-full max-w-full overflow-hidden">
+          <div className="flex items-center justify-between text-white w-full max-w-full min-w-0">
             {/* Left Toolbar: Play, Skip, Time, Volume */}
             <div className="flex items-center gap-1 sm:gap-2 md:gap-4 min-w-0 flex-shrink">
               {onPrevEpisode && (
@@ -1347,13 +1613,14 @@ export function VideoPlayer({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAudioMenu(!showAudioMenu);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAudioMenu((prev) => !prev);
                     setShowSubtitleMenu(false);
                     setShowSettingsMenu(false);
                   }}
-                  className={`p-1 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 ${
-                    showAudioMenu ? 'text-emerald-400' : 'text-slate-300 hover:text-white'
+                  className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
+                    showAudioMenu ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-300 hover:text-white'
                   }`}
                   title="Audio Languages"
                   aria-label="Audio Languages"
@@ -1362,27 +1629,35 @@ export function VideoPlayer({
                 </button>
 
                 {showAudioMenu && (
-                  <div className="absolute bottom-12 right-0 w-48 sm:w-52 max-w-[calc(100vw-2rem)] max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-48 sm:w-56 max-w-[calc(100vw-1.5rem)] max-h-40 sm:max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs select-none touch-manipulation"
+                  >
                     <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center gap-1.5">
                       <IconTranslate className="w-3.5 h-3.5 text-emerald-400" />
                       Audio Languages
                     </div>
-                    {availableDubs.map((dub) => {
-                      const isActive = dub.id === activeDubId;
+                    {allAudioTracks.map((track) => {
+                      const isActive = track.id === activeAudioId;
                       return (
                         <button
-                          key={dub.id}
+                          key={track.id}
                           type="button"
-                          onClick={() => handleAudioDubChange(dub.id, dub.label)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
+                          onClick={() => handleSelectAudioTrack(track)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
                             isActive ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                           }`}
                         >
-                          <span className="truncate mr-1">{dub.label}</span>
+                          <span className="truncate mr-1">{track.label}</span>
                           {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
                         </button>
                       );
                     })}
+                    {allAudioTracks.length === 1 && (
+                      <div className="px-2.5 py-1 text-[10px] text-slate-400 italic border-t border-white/5 mt-1">
+                        Single audio track stream
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1391,13 +1666,14 @@ export function VideoPlayer({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowSubtitleMenu(!showSubtitleMenu);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowSubtitleMenu((prev) => !prev);
                     setShowAudioMenu(false);
                     setShowSettingsMenu(false);
                   }}
-                  className={`p-1 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 ${
-                    activeSubtitle !== 'off' ? 'text-primary' : 'text-slate-300 hover:text-white'
+                  className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
+                    showSubtitleMenu || activeSubtitle !== 'off' ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'
                   }`}
                   title="Subtitles"
                   aria-label="Subtitles"
@@ -1406,7 +1682,10 @@ export function VideoPlayer({
                 </button>
 
                 {showSubtitleMenu && (
-                  <div className="absolute bottom-12 right-0 w-44 sm:w-48 max-w-[calc(100vw-2rem)] max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-44 sm:w-52 max-w-[calc(100vw-1.5rem)] max-h-40 sm:max-h-56 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs select-none touch-manipulation"
+                  >
                     <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center justify-between">
                       <span>Subtitles</span>
                       <IconSubtitle className="w-3.5 h-3.5 text-primary" />
@@ -1414,29 +1693,35 @@ export function VideoPlayer({
                     <button
                       type="button"
                       onClick={() => handleSubtitleChange('off')}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
                         activeSubtitle === 'off' ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                       }`}
                     >
                       <span>Off</span>
                       {activeSubtitle === 'off' && <IconCheck className="w-3.5 h-3.5" />}
                     </button>
-                    {currentStream?.subtitles?.map((sub) => {
-                      const isActive = activeSubtitle === sub.id;
-                      return (
-                        <button
-                          key={sub.id}
-                          type="button"
-                          onClick={() => handleSubtitleChange(sub.id)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
-                            isActive ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
-                          }`}
-                        >
-                          <span className="truncate mr-1">{sub.label}</span>
-                          {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
-                        </button>
-                      );
-                    })}
+                    {allSubtitleTracks.length > 0 ? (
+                      allSubtitleTracks.map((sub) => {
+                        const isActive = activeSubtitle === sub.id;
+                        return (
+                          <button
+                            key={sub.id}
+                            type="button"
+                            onClick={() => handleSubtitleChange(sub.id)}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                              isActive ? 'bg-primary text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            <span className="truncate mr-1">{sub.label}</span>
+                            {isActive && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-2.5 py-1 text-[11px] text-slate-400 italic">
+                        No subtitles available
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1445,12 +1730,15 @@ export function VideoPlayer({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowSettingsMenu(!showSettingsMenu);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowSettingsMenu((prev) => !prev);
                     setShowSubtitleMenu(false);
                     setShowAudioMenu(false);
                   }}
-                  className="p-1 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0"
+                  className={`p-1.5 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
+                    showSettingsMenu ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'
+                  }`}
                   title="Playback Settings"
                   aria-label="Playback Settings"
                 >
@@ -1458,7 +1746,10 @@ export function VideoPlayer({
                 </button>
 
                 {showSettingsMenu && (
-                  <div className="absolute bottom-12 right-0 w-52 sm:w-56 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-52 sm:w-56 max-w-[calc(100vw-1.5rem)] max-h-48 sm:max-h-64 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs select-none touch-manipulation"
+                  >
                     {/* Quality selector */}
                     <div>
                       <div className="font-bold text-slate-300 mb-1.5">Quality</div>

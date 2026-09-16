@@ -15,7 +15,6 @@ import { ContentItem } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storage/local-storage-store';
 import { movieboxApi } from '@/lib/api/moviebox-client';
-import { isAdultContent } from '@/lib/utils/content-filter';
 
 // Client-side module-level cache to ensure instant zero-latency Home navigation
 let cachedLiveItems: ContentItem[] | null = null;
@@ -57,41 +56,38 @@ export default function HomePage() {
   }, []);
 
   const featuredItems = useMemo(() => {
-    const seedFeatured = SEED_CONTENT.filter((item) => item.featured && !isAdultContent(item));
+    const seedFeatured = SEED_CONTENT.filter((item) => item.featured);
     if (liveItems.length > 0) {
-      const liveFeatured = liveItems.filter((i) => !isAdultContent(i)).slice(0, 5).map((item) => ({ ...item, featured: true }));
+      const liveFeatured = liveItems.slice(0, 5).map((item) => ({ ...item, featured: true }));
       return [...liveFeatured, ...seedFeatured];
     }
     return seedFeatured;
   }, [liveItems]);
 
   const trendingItems = useMemo(() => {
-    const cleanLive = liveItems.filter((i) => !isAdultContent(i));
-    const cleanSeed = SEED_CONTENT.filter((i) => !isAdultContent(i));
-    if (cleanLive.length > 0) {
-      return [...cleanLive, ...cleanSeed];
+    if (liveItems.length > 0) {
+      return [...liveItems, ...SEED_CONTENT];
     }
-    return [...cleanSeed].sort((a, b) => b.rating - a.rating);
+    return [...SEED_CONTENT].sort((a, b) => b.rating - a.rating);
   }, [liveItems]);
 
   const movieboxFeatured = useMemo(() => {
-    const seedMb = SEED_CONTENT.filter((c) => c.id.startsWith('mb-') && !isAdultContent(c));
-    const cleanLive = liveItems.filter((i) => !isAdultContent(i));
-    if (cleanLive.length > 0) {
-      return [...seedMb, ...cleanLive];
+    const seedMb = SEED_CONTENT.filter((c) => c.id.startsWith('mb-'));
+    if (liveItems.length > 0) {
+      return [...seedMb, ...liveItems];
     }
     return seedMb;
   }, [liveItems]);
 
   const latestMovies = useMemo(() => {
-    const liveMovies = liveItems.filter((i) => i.contentType === 'movie' && !isAdultContent(i));
-    const seedMovies = SEED_CONTENT.filter((item) => item.contentType === 'movie' && !isAdultContent(item));
+    const liveMovies = liveItems.filter((i) => i.contentType === 'movie');
+    const seedMovies = SEED_CONTENT.filter((item) => item.contentType === 'movie');
     return liveMovies.length > 0 ? [...liveMovies, ...seedMovies] : seedMovies;
   }, [liveItems]);
 
   const latestTvShows = useMemo(() => {
-    const liveTv = liveItems.filter((i) => i.contentType === 'tv' && !isAdultContent(i));
-    const seedTv = SEED_CONTENT.filter((item) => item.contentType === 'tv' && !isAdultContent(item));
+    const liveTv = liveItems.filter((i) => i.contentType === 'tv');
+    const seedTv = SEED_CONTENT.filter((item) => item.contentType === 'tv');
     return liveTv.length > 0 ? [...liveTv, ...seedTv] : seedTv;
   }, [liveItems]);
 
