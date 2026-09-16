@@ -263,3 +263,39 @@ export function deduplicateAndCleanCatalog<
 
   return Array.from(seenCanonical.values());
 }
+
+/**
+ * Determines whether a ContentItem is classified as mature / adult (18+)
+ * based strictly on verified provider/database metadata (rating, certification, genre).
+ */
+export function isAdultContent(item: {
+  ageRating?: string;
+  genres?: { name?: string; slug?: string }[];
+}): boolean {
+  if (!item) return false;
+
+  // 1. Explicit 18+ Age rating / certification checks
+  const adultRatings = ['18+', 'NC-17', 'TV-MA', 'R18', 'ADULT', 'X', 'XXX'];
+  if (item.ageRating && adultRatings.includes(item.ageRating.toUpperCase().trim())) {
+    return true;
+  }
+
+  // 2. Explicit adult / erotica genre checks
+  if (item.genres && Array.isArray(item.genres)) {
+    const isAdultGenre = item.genres.some((g) => {
+      const slug = (g?.slug || '').toLowerCase().trim();
+      const name = (g?.name || '').toLowerCase().trim();
+      return (
+        slug === 'adult' ||
+        slug === 'erotica' ||
+        slug === '18+' ||
+        name === 'adult' ||
+        name === 'erotica' ||
+        name === '18+'
+      );
+    });
+    if (isAdultGenre) return true;
+  }
+
+  return false;
+}

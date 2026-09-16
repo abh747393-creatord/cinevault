@@ -7,6 +7,7 @@ import { SearchBar } from '@/components/search/search-bar';
 import { ContentCard } from '@/components/cards/content-card';
 import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { ContentType, ContentItem } from '@/types/content';
+import { isAdultContent } from '@/lib/utils/content-filter';
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -71,6 +72,7 @@ function SearchContent() {
     if (!q) return [];
 
     const localMatches = SEED_CONTENT.filter((item) => {
+      if (isAdultContent(item)) return false;
       const matchesTitle = item.title.toLowerCase().includes(q);
       const matchesDesc = item.description.toLowerCase().includes(q);
       const matchesOrig = item.originalTitle?.toLowerCase().includes(q);
@@ -89,8 +91,8 @@ function SearchContent() {
     });
 
     // Prioritize live provider-backed results from Sign Ultra VIP Cinema
-    const combined = [...liveResults];
-    const seenTitles = new Set(liveResults.map((m) => m.title.toLowerCase()));
+    const combined = liveResults.filter((m) => !isAdultContent(m));
+    const seenTitles = new Set(combined.map((m) => m.title.toLowerCase()));
 
     for (const r of localMatches) {
       if (!seenTitles.has(r.title.toLowerCase())) {

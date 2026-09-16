@@ -8,6 +8,7 @@ import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
+import { isAdultContent } from '@/lib/utils/content-filter';
 
 let cachedLiveMovies: ContentItem[] | null = null;
 
@@ -57,8 +58,8 @@ export default function MoviesPage() {
   }, []);
 
   const filteredMovies = useMemo(() => {
-    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'movie');
-    let list = liveMovies.length > 0 ? [...liveMovies, ...seedList] : seedList;
+    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'movie' && !isAdultContent(c));
+    let list = liveMovies.length > 0 ? [...liveMovies, ...seedList].filter((c) => !isAdultContent(c)) : seedList;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
