@@ -159,10 +159,30 @@ export default function MidnightPage() {
           uniqueItems.push(mapToContentItem(item));
         }
 
-        setMidnightList(uniqueItems);
       } else if (res.status === 401 || res.status === 403) {
         // Session expired or disabled
         checkStatus();
+      } else {
+        // Upstream provider temporarily unreachable from serverless container;
+        // fallback to direct client-side provider fetch since session is verified
+        try {
+          const { movieboxApi } = await import('@/lib/api/moviebox-client');
+          const data = await movieboxApi.homepage('9', 1);
+          const rawItems = data?.items || [];
+          const seenIds = new Set<string>();
+          const uniqueItems: ContentItem[] = [];
+
+          for (const item of rawItems) {
+            const idVal = item.id?.value;
+            if (!idVal || seenIds.has(idVal)) continue;
+            seenIds.add(idVal);
+            uniqueItems.push(mapToContentItem(item));
+          }
+
+          setMidnightList(uniqueItems);
+        } catch (clientErr) {
+          console.error('Client fallback also failed:', clientErr);
+        }
       }
     } catch (err) {
       console.error('Failed to load Midnight content:', err);
@@ -269,7 +289,14 @@ export default function MidnightPage() {
         const mapped = (results || []).map((it: any) => mapToContentItem(it));
         setSearchResults(mapped);
       } else {
-        setSearchResults([]);
+        try {
+          const { movieboxApi } = await import('@/lib/api/moviebox-client');
+          const results = await movieboxApi.search(q);
+          const mapped = (results || []).map((it: any) => mapToContentItem(it));
+          setSearchResults(mapped);
+        } catch {
+          setSearchResults([]);
+        }
       }
     } catch {
       setSearchResults([]);
