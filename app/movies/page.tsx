@@ -57,8 +57,17 @@ export default function MoviesPage() {
   }, []);
 
   const filteredMovies = useMemo(() => {
-    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'movie');
-    let list = liveMovies.length > 0 ? [...liveMovies, ...seedList] : seedList;
+    const providerSeed = SEED_CONTENT.filter((c) => c.contentType === 'movie' && !c.id.startsWith('c-'));
+    const combined = liveMovies.length > 0 ? [...liveMovies, ...providerSeed] : providerSeed;
+    const seen = new Set<string>();
+    let list: ContentItem[] = [];
+    for (const item of combined) {
+      const key = item.externalId || item.id;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(item);
+      }
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
