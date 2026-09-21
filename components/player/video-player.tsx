@@ -612,6 +612,7 @@ export function VideoPlayer({
       if (dashPlayerRef.current) {
         try {
           dashPlayerRef.current.setAutoSwitchQualityFor('video', true);
+          console.info('[DASH ABR] Switched to AUTO adaptive bitrate mode');
         } catch (err) {
           console.warn('[VideoPlayer] Failed to enable auto quality:', err);
         }
@@ -625,6 +626,7 @@ export function VideoPlayer({
         try {
           dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
           dashPlayerRef.current.setQualityFor('video', option.qualityIndex);
+          console.info(`[DASH ABR] User manually locked quality to index ${option.qualityIndex} (${option.label})`);
         } catch (err) {
           console.warn('[VideoPlayer] Failed to set video quality:', err);
         }
@@ -690,12 +692,12 @@ export function VideoPlayer({
               lowLatencyEnabled: false,
               fastSwitchEnabled: true,
               buffer: {
-                bufferPruningInterval: 3, // Aggressively prune played chunks every 3s
-                bufferToKeep: 6, // Keep only 6 seconds behind playback
-                bufferTimeDefault: 8, // Keep only 8 seconds forward buffer
-                bufferTimeAtTopQuality: 10, // Max 10 seconds ahead
-                bufferTimeAtTopQualityLongForm: 12, // Never buffer 60 seconds ahead
-                longFormContentDurationThreshold: 100000, // Prevent 60s buffer explosion
+                bufferPruningInterval: 5,
+                bufferToKeep: 10, // Keep 10 seconds behind playback
+                bufferTimeDefault: 12, // 12 seconds forward buffer (healthy, smooth, avoids stalls on jitter)
+                bufferTimeAtTopQuality: 20, // 20 seconds forward buffer when at 1080p (absorbs larger chunk sizes)
+                bufferTimeAtTopQualityLongForm: 24, // 24 seconds for long movies
+                longFormContentDurationThreshold: 600, // 10 minutes threshold for movies
                 flushBufferAtTrackSwitch: true, // Flush old buffers on audio/quality switch
                 resetSourceBuffersForTrackSwitch: true, // Reset SourceBuffers on track switch
                 reuseExistingSourceBuffers: false, // Do not accumulate old allocations
@@ -717,7 +719,7 @@ export function VideoPlayer({
                 limitBitrateByPortal: false, // DO NOT cap representation by element DOM width!
                 useDefaultABRRules: true,
                 initialBitrate: {
-                  video: 2500, // in kbps: start at a healthy 2.5 Mbps estimate instead of 480p default
+                  video: -1, // Dynamic ABR start: prevents forced 1080p startup buffering stalls
                 },
               },
             },
@@ -792,6 +794,12 @@ export function VideoPlayer({
             } catch {}
             updateTracksFromPlayer();
             updateQualitiesFromPlayer();
+
+            try {
+              const bitrates = player.getBitrateInfoListFor('video');
+              const currQ = player.getQualityFor('video');
+              console.info(`[DASH ABR] Stream initialized. Discovered ${bitrates?.length || 0} representations. Active quality index: ${currQ}`);
+            } catch {}
           });
 
           player.on(dashjs.MediaPlayer.events.CAN_PLAY, () => {
@@ -806,14 +814,53 @@ export function VideoPlayer({
             updateQualitiesFromPlayer();
           });
 
+          player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_REQUESTED, (e: any) => {
+            if (e && e.mediaType === 'video') {
+              try {
+                const bitrates = player.getBitrateInfoListFor('video');
+                const target = bitrates?.[e.newQuality];
+                console.info(
+                  `[DASH ABR] Quality switch requested: Index ${e.oldQuality} -> ${e.newQuality} (${target?.height || 0}p, ${Math.round((target?.bitrate || 0) / 1000)} kbps). Reason: ${e.reason || 'ABR'}`
+                );
+              } catch {}
+            }
+          });
+
           player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e: any) => {
             if (e && e.mediaType === 'video') {
               setCurrentQualityIndex(e.newQuality);
+              try {
+                const bitrates = player.getBitrateInfoListFor('video');
+                const rendered = bitrates?.[e.newQuality];
+                const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+                console.info(
+                  `[DASH ABR] Quality change rendered: Index ${e.newQuality} (${rendered?.height || 0}p, ${Math.round((rendered?.bitrate || 0) / 1000)} kbps). Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
+                );
+              } catch {}
+            }
+          });
+
+          player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, (e: any) => {
+            if (e && e.mediaType === 'video') {
+              try {
+                const throughput = typeof player.getAverageThroughput === 'function' ? player.getAverageThroughput('video') : null;
+                const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+                // Periodic diagnostic sampling or on low buffer
+                if (Math.random() < 0.2 || (typeof bufferLen === 'number' && bufferLen < 6)) {
+                  console.debug(
+                    `[DASH ABR] Segment loaded. Estimated throughput: ${throughput ? Math.round(throughput) + ' kbps' : 'measuring...'}, Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
+                  );
+                }
+              } catch {}
             }
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, () => {
             handleVideoPlaying();
+            try {
+              const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+              console.info(`[DASH ABR] Playback playing. Buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`);
+            } catch {}
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_PAUSED, () => {
@@ -822,6 +869,13 @@ export function VideoPlayer({
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_WAITING, () => {
             setIsLoading(true);
+            try {
+              const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+              const currentQ = typeof player.getQualityFor === 'function' ? player.getQualityFor('video') : null;
+              console.warn(
+                `[DASH ABR] Playback stalled (waiting). Buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(2) + 's' : 'empty'}, Active quality index: ${currentQ}`
+              );
+            } catch {}
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
