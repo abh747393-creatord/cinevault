@@ -300,7 +300,7 @@ export class MovieBoxProvider implements ContentProvider {
           else if (lowerQ.includes('360')) q = '360p';
           else if (lowerQ.includes('multi') || lowerQ.includes('auto')) q = 'auto';
 
-          const isDash = mirror.proxy_url?.includes('.mpd') || mirror.proxy_url?.includes('/manifest.mpd');
+          const isDash = mirror.proxy_url?.includes('.mpd') || mirror.proxy_url?.includes('/manifest.mpd') || mirror.proxy_url?.includes('/dash/') || mirror.resolver_url?.includes('.mpd');
           const cleanLabel = isDash ? 'Multi-Res' : (q || mirror.label);
 
           streamSources.push({
@@ -315,6 +315,20 @@ export class MovieBoxProvider implements ContentProvider {
           });
         }
       }
+
+      // Sort stream sources descending by resolution priority (Multi-Res DASH / 4K / 1080p first)
+      const getQualityScore = (s: StreamSource): number => {
+        const isDash = s.url?.includes('.mpd') || s.url?.includes('/dash/') || s.url?.includes('/manifest.mpd');
+        if (isDash) return 3000; // Multi-res DASH adapts dynamically up to highest manifest resolution
+        if (s.quality === '4K') return 2160;
+        if (s.quality === '1080p') return 1080;
+        if (s.quality === 'auto') return 1000;
+        if (s.quality === '720p') return 720;
+        if (s.quality === '480p') return 480;
+        if (s.quality === '360p') return 360;
+        return 500;
+      };
+      streamSources.sort((a, b) => getQualityScore(b) - getQualityScore(a));
 
       // Fetch external subtitles
       try {

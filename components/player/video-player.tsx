@@ -22,6 +22,7 @@ import {
   IconSquareShareLine,
   IconTranslate,
   IconCheck,
+  IconHighDefinition,
 } from '@/components/ui/icons';
 import { StreamSource, SubtitleTrack } from '@/types/providers';
 import { ContentItem, Episode } from '@/types/content';
@@ -168,6 +169,14 @@ export interface UnifiedSubtitleTrack {
   dashTrackIndex?: number;
 }
 
+export interface DashVideoQualityOption {
+  qualityIndex: number;
+  height: number;
+  width: number;
+  bitrate: number;
+  label: string;
+}
+
 interface VideoPlayerProps {
   content: ContentItem;
   streams: StreamSource[];
@@ -268,6 +277,11 @@ export function VideoPlayer({
   const [dashAudioTracks, setDashAudioTracks] = useState<any[]>([]);
   const [currentDashAudioTrack, setCurrentDashAudioTrack] = useState<any>(null);
   const [dashTextTracks, setDashTextTracks] = useState<any[]>([]);
+  const [dashVideoQualities, setDashVideoQualities] = useState<DashVideoQualityOption[]>([]);
+  const [currentQualityIndex, setCurrentQualityIndex] = useState<number>(-1);
+  const [activeQualityLabel, setActiveQualityLabel] = useState<string>('Auto');
+  const [isAutoQuality, setIsAutoQuality] = useState<boolean>(true);
+  const [showQualityMenu, setShowQualityMenu] = useState<boolean>(false);
 
   // Unified Audio Tracks (DASH adaptation sets + Stream metadata + Provider dubs)
   const allAudioTracks = useMemo<UnifiedAudioTrack[]>(() => {
@@ -431,13 +445,13 @@ export function VideoPlayer({
 
   // Clear auto-hide controls timer while any dropdown menu is actively open
   useEffect(() => {
-    if (showAudioMenu || showSubtitleMenu || showSettingsMenu) {
+    if (showAudioMenu || showSubtitleMenu || showSettingsMenu || showQualityMenu) {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
         controlsTimeoutRef.current = null;
       }
     }
-  }, [showAudioMenu, showSubtitleMenu, showSettingsMenu]);
+  }, [showAudioMenu, showSubtitleMenu, showSettingsMenu, showQualityMenu]);
 
   // Fetch and parse subtitle cues whenever activeSubtitle changes or stream changes
   useEffect(() => {
@@ -592,6 +606,49 @@ export function VideoPlayer({
     setShowAudioMenu(false);
   };
 
+  // Unified Quality switcher (switches in-manifest DASH video representation seamlessly without reload)
+  const handleSelectQuality = (option: DashVideoQualityOption | 'auto') => {
+    if (option === 'auto') {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.setAutoSwitchQualityFor('video', true);
+        } catch (err) {
+          console.warn('[VideoPlayer] Failed to enable auto quality:', err);
+        }
+      }
+      setIsAutoQuality(true);
+      setActiveQualityLabel('Auto');
+      setShowQualityMenu(false);
+      setShowSettingsMenu(false);
+    } else {
+      if (dashPlayerRef.current) {
+        try {
+          dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
+          dashPlayerRef.current.setQualityFor('video', option.qualityIndex);
+        } catch (err) {
+          console.warn('[VideoPlayer] Failed to set video quality:', err);
+        }
+      }
+      setIsAutoQuality(false);
+      setCurrentQualityIndex(option.qualityIndex);
+      setActiveQualityLabel(option.label);
+      setShowQualityMenu(false);
+      setShowSettingsMenu(false);
+    }
+  };
+
+  // Dynamically computed quality badge for player toolbar
+  const displayedQualityBadge = useMemo(() => {
+    if (dashVideoQualities.length > 0) {
+      if (!isAutoQuality) {
+        return activeQualityLabel.split(' ')[0]; // e.g. "1080p", "720p", "4K"
+      }
+      const currentOpt = dashVideoQualities.find((q) => q.qualityIndex === currentQualityIndex);
+      return currentOpt ? `Auto (${currentOpt.height > 0 ? `${currentOpt.height}p` : currentOpt.label.split(' ')[0]})` : 'Auto';
+    }
+    return currentStream?.quality || 'HD';
+  }, [dashVideoQualities, isAutoQuality, activeQualityLabel, currentQualityIndex, currentStream]);
+
   // Initialize dash.js for MPEG-DASH streams or native HTML5 for direct files
   useEffect(() => {
     if (playMode !== 'stream' || !currentStream?.url || !videoRef.current) return;
@@ -657,7 +714,11 @@ export function VideoPlayer({
                   video: true,
                   audio: true,
                 },
-                limitBitrateByPortal: true,
+                limitBitrateByPortal: false, // DO NOT cap representation by element DOM width!
+                useDefaultABRRules: true,
+                initialBitrate: {
+                  video: 2500, // in kbps: start at a healthy 2.5 Mbps estimate instead of 480p default
+                },
               },
             },
           });
@@ -681,6 +742,40 @@ export function VideoPlayer({
             } catch {}
           };
 
+          const updateQualitiesFromPlayer = () => {
+            try {
+              const bitrates = player.getBitrateInfoListFor('video');
+              if (bitrates && bitrates.length > 0) {
+                const opts: DashVideoQualityOption[] = bitrates.map((b: any, idx: number) => {
+                  const h = b.height || 0;
+                  let label = h > 0 ? `${h}p` : `${Math.round((b.bitrate || 0) / 1000)}k`;
+                  if (h >= 2160) label = '2160p (4K)';
+                  else if (h >= 1440) label = '1440p (2K)';
+                  else if (h >= 1080) label = '1080p (FHD)';
+                  else if (h >= 720) label = '720p (HD)';
+                  else if (h >= 480) label = '480p (SD)';
+                  return {
+                    qualityIndex: typeof b.qualityIndex === 'number' ? b.qualityIndex : idx,
+                    height: h,
+                    width: b.width || 0,
+                    bitrate: b.bitrate || 0,
+                    label,
+                  };
+                });
+                // Sort descending by height or bitrate
+                opts.sort((a, b) => (b.height || b.bitrate) - (a.height || a.bitrate));
+                setDashVideoQualities(opts);
+
+                const isAuto = player.getAutoSwitchQualityFor('video');
+                setIsAutoQuality(isAuto);
+                const currQ = player.getQualityFor('video');
+                setCurrentQualityIndex(currQ);
+              }
+            } catch (e) {
+              console.warn('[Dash.js] Failed to get video bitrate list:', e);
+            }
+          };
+
           player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
             console.warn('Dash.js error:', e);
             handleVideoError();
@@ -696,12 +791,25 @@ export function VideoPlayer({
               }
             } catch {}
             updateTracksFromPlayer();
+            updateQualitiesFromPlayer();
           });
 
           player.on(dashjs.MediaPlayer.events.CAN_PLAY, () => {
             setIsLoading(false);
             setHasError(false);
             updateTracksFromPlayer();
+            updateQualitiesFromPlayer();
+          });
+
+          player.on(dashjs.MediaPlayer.events.PERIOD_SWITCH_COMPLETED, () => {
+            updateTracksFromPlayer();
+            updateQualitiesFromPlayer();
+          });
+
+          player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e: any) => {
+            if (e && e.mediaType === 'video') {
+              setCurrentQualityIndex(e.newQuality);
+            }
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, () => {
@@ -725,6 +833,7 @@ export function VideoPlayer({
             }
             setIsLoading(false);
             updateTracksFromPlayer();
+            updateQualitiesFromPlayer();
           });
 
           dashPlayerRef.current = player;
@@ -746,6 +855,10 @@ export function VideoPlayer({
       setDashAudioTracks([]);
       setCurrentDashAudioTrack(null);
       setDashTextTracks([]);
+      setDashVideoQualities([]);
+      setCurrentQualityIndex(-1);
+      setIsAutoQuality(true);
+      setActiveQualityLabel('Auto');
       if (dashPlayerRef.current) {
         try {
           dashPlayerRef.current.reset();
@@ -863,7 +976,7 @@ export function VideoPlayer({
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     // Only auto-hide controls if no dropdown menus are actively open
-    if (isPlaying && !showAudioMenu && !showSubtitleMenu && !showSettingsMenu) {
+    if (isPlaying && !showAudioMenu && !showSubtitleMenu && !showSettingsMenu && !showQualityMenu) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3500);
@@ -887,10 +1000,11 @@ export function VideoPlayer({
   };
 
   const handleVideoClick = () => {
-    if (showAudioMenu || showSubtitleMenu || showSettingsMenu) {
+    if (showAudioMenu || showSubtitleMenu || showSettingsMenu || showQualityMenu) {
       setShowAudioMenu(false);
       setShowSubtitleMenu(false);
       setShowSettingsMenu(false);
+      setShowQualityMenu(false);
       return;
     }
     togglePlay();
@@ -1618,6 +1732,7 @@ export function VideoPlayer({
                     setShowAudioMenu((prev) => !prev);
                     setShowSubtitleMenu(false);
                     setShowSettingsMenu(false);
+                    setShowQualityMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showAudioMenu ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-300 hover:text-white'
@@ -1671,6 +1786,7 @@ export function VideoPlayer({
                     setShowSubtitleMenu((prev) => !prev);
                     setShowAudioMenu(false);
                     setShowSettingsMenu(false);
+                    setShowQualityMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showSubtitleMenu || activeSubtitle !== 'off' ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'
@@ -1726,6 +1842,118 @@ export function VideoPlayer({
                 )}
               </div>
 
+              {/* Quality Menu Toggle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowQualityMenu((prev) => !prev);
+                    setShowAudioMenu(false);
+                    setShowSubtitleMenu(false);
+                    setShowSettingsMenu(false);
+                  }}
+                  className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex items-center gap-1 flex-shrink-0 touch-manipulation ${
+                    showQualityMenu || !isAutoQuality
+                      ? 'text-amber-400 bg-amber-500/15 border border-amber-500/30'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Video Quality"
+                  aria-label="Video Quality"
+                >
+                  <IconHighDefinition className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                  <span className="hidden xs:inline text-[10px] sm:text-[11px] font-bold text-amber-300">
+                    {displayedQualityBadge}
+                  </span>
+                </button>
+
+                {showQualityMenu && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-52 sm:w-60 max-w-[calc(100vw-1.5rem)] max-h-56 sm:max-h-72 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2 shadow-2xl space-y-1 z-50 text-xs select-none touch-manipulation"
+                  >
+                    <div className="font-bold text-slate-300 px-2 py-1 border-b border-white/10 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <IconHighDefinition className="w-3.5 h-3.5 text-amber-400" />
+                        Video Quality
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {dashVideoQualities.length > 0 ? 'Multi-Res' : 'Direct'}
+                      </span>
+                    </div>
+
+                    {/* Auto (Adaptive) Option */}
+                    <button
+                      type="button"
+                      onClick={() => handleSelectQuality('auto')}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                        isAutoQuality ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold">Auto (Adaptive)</div>
+                        <div className="text-[10px] opacity-80">Dynamic network bitrate</div>
+                      </div>
+                      {isAutoQuality && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
+                    </button>
+
+                    {/* In-manifest DASH resolutions */}
+                    {dashVideoQualities.length > 0 ? (
+                      dashVideoQualities.map((q) => {
+                        const isSelected = !isAutoQuality && currentQualityIndex === q.qualityIndex;
+                        const isCurrentlyPlaying = isAutoQuality && currentQualityIndex === q.qualityIndex;
+                        return (
+                          <button
+                            key={q.qualityIndex}
+                            type="button"
+                            onClick={() => handleSelectQuality(q)}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                              isSelected ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-1">
+                              <div className="font-semibold flex items-center gap-1.5">
+                                <span>{q.label}</span>
+                                {isCurrentlyPlaying && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    Current
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] opacity-75">
+                                {q.width > 0 && q.height > 0 ? `${q.width}×${q.height}` : ''}
+                                {q.bitrate > 0 ? ` · ${Math.round(q.bitrate / 1000)} kbps` : ''}
+                              </div>
+                            </div>
+                            {isSelected && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      activeStreams.map((s, idx) => {
+                        const isSelected = idx === currentStreamIndex;
+                        return (
+                          <button
+                            key={s.id || idx}
+                            type="button"
+                            onClick={() => {
+                              handleQualityChange(idx);
+                              setShowQualityMenu(false);
+                            }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                              isSelected ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            <span>{s.quality || 'Source'}</span>
+                            {isSelected && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Settings Menu Toggle (Speed, Quality) */}
               <div className="relative">
                 <button
@@ -1735,6 +1963,7 @@ export function VideoPlayer({
                     setShowSettingsMenu((prev) => !prev);
                     setShowSubtitleMenu(false);
                     setShowAudioMenu(false);
+                    setShowQualityMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showSettingsMenu ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'
@@ -1748,26 +1977,58 @@ export function VideoPlayer({
                 {showSettingsMenu && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-11 sm:bottom-12 right-0 w-52 sm:w-56 max-w-[calc(100vw-1.5rem)] max-h-48 sm:max-h-64 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs select-none touch-manipulation"
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-52 sm:w-60 max-w-[calc(100vw-1.5rem)] max-h-48 sm:max-h-64 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl space-y-3 z-50 text-xs select-none touch-manipulation"
                   >
                     {/* Quality selector */}
                     <div>
-                      <div className="font-bold text-slate-300 mb-1.5">Quality</div>
-                      <div className="grid grid-cols-3 gap-1">
-                        {activeStreams.map((s, idx) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => handleQualityChange(idx)}
-                            className={`py-1 px-1.5 rounded text-center font-medium ${
-                              idx === currentStreamIndex
-                                ? 'bg-primary text-white font-bold'
-                                : 'bg-white/5 hover:bg-white/10 text-slate-300'
-                            }`}
-                          >
-                            {s.quality}
-                          </button>
-                        ))}
+                      <div className="font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Quality</span>
+                        <span className="text-[10px] text-amber-400 font-normal">{displayedQualityBadge}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuality('auto')}
+                          className={`py-1 px-1.5 rounded text-center font-medium ${
+                            isAutoQuality
+                              ? 'bg-amber-600 text-white font-bold'
+                              : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                          }`}
+                        >
+                          Auto
+                        </button>
+                        {dashVideoQualities.length > 0
+                          ? dashVideoQualities.map((q) => (
+                              <button
+                                key={q.qualityIndex}
+                                type="button"
+                                onClick={() => handleSelectQuality(q)}
+                                className={`py-1 px-1.5 rounded text-center font-medium ${
+                                  !isAutoQuality && currentQualityIndex === q.qualityIndex
+                                    ? 'bg-amber-600 text-white font-bold'
+                                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                                }`}
+                              >
+                                {q.height > 0 ? `${q.height}p` : q.label.split(' ')[0]}
+                              </button>
+                            ))
+                          : activeStreams.map((s, idx) => (
+                              <button
+                                key={s.id || idx}
+                                type="button"
+                                onClick={() => {
+                                  handleQualityChange(idx);
+                                  setShowSettingsMenu(false);
+                                }}
+                                className={`py-1 px-1.5 rounded text-center font-medium ${
+                                  idx === currentStreamIndex
+                                    ? 'bg-amber-600 text-white font-bold'
+                                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                                }`}
+                              >
+                                {s.quality || 'Source'}
+                              </button>
+                            ))}
                       </div>
                     </div>
 
