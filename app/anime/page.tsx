@@ -90,13 +90,11 @@ export default function AnimePage() {
       title: cleanTitle || it.title,
       slug: `mb-${rawId}`,
       contentType: isSeries ? 'tv' : 'movie',
-      posterUrl: it.poster_url || '',
-      backdropUrl: it.poster_url || '',
-      description: `${cleanTitle} (${it.year || 'Anime Series'}) - Authentic Japanese audio, dynamic multi-language dubs, and crystal clear 1080p stream.`,
+      posterUrl: it.poster_url || '/images/neutral-poster.svg',
+      backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+      description: `${cleanTitle || it.title} (${it.year || 'Anime Series'})`,
       releaseDate: it.year ? `${it.year}-01-01` : '',
       year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-      rating: hasHindi ? 9.4 : 9.1,
-      quality: '1080p',
       genres,
       language: 'Japanese',
       availableAudio,
@@ -177,7 +175,7 @@ export default function AnimePage() {
     }
 
     if (selectedCategory === 'trending') {
-      list = [...list].sort((a, b) => b.rating - a.rating);
+      list = [...list].sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (selectedCategory === 'dub') {
       list = list.filter((a) =>
         a.title.toLowerCase().includes('hindi') ||

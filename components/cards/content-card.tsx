@@ -17,7 +17,7 @@ interface ContentCardProps {
   className?: string;
 }
 
-const FALLBACK_POSTER = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80';
+const FALLBACK_POSTER = '/images/neutral-poster.svg';
 
 export const ContentCard = memo(function ContentCard({
   content,
@@ -90,10 +90,12 @@ export const ContentCard = memo(function ContentCard({
 
         {/* Top Badges */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-10">
-          <Badge variant="rating" size="sm" className="shadow-md flex items-center gap-1">
-            <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
-            {content.rating}
-          </Badge>
+          {content.rating !== undefined && content.rating > 0 ? (
+            <Badge variant="rating" size="sm" className="shadow-md flex items-center gap-1">
+              <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
+              {content.rating.toFixed(1)}
+            </Badge>
+          ) : <div />}
 
           {content.quality && (
             <Badge variant="quality" size="sm" className="bg-black/60 shadow-md">

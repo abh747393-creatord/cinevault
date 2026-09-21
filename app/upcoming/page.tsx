@@ -14,7 +14,6 @@ import {
 import { ContentCard } from '@/components/cards/content-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { ContentItem } from '@/types/content';
 import { movieboxApi } from '@/lib/api/moviebox-client';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storage/local-storage-store';
@@ -35,32 +34,39 @@ export default function UpcomingPage() {
 
   useEffect(() => {
     let isMounted = true;
-    // Fetch fresh 2026 releases from MovieBox gateway
+    setLoading(true);
+    // Fetch fresh upcoming releases from MovieBox gateway
     movieboxApi.homepage('movie', 1).then((data) => {
       if (!isMounted) return;
       if (data && data.items) {
         const upcoming2026 = data.items
           .filter((it) => it.year && parseInt(it.year, 10) >= 2026)
-          .map((it) => ({
-            id: `mb-${it.id.value}`,
-            externalId: it.id.value,
-            title: it.title,
-            slug: `mb-${it.id.value}`,
-            contentType: (it.media_type === 'series' ? 'tv' : 'movie') as 'movie' | 'tv',
-            posterUrl: it.poster_url || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80',
-            backdropUrl: it.poster_url || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80',
-            description: `${it.title} (${it.year || '2026'}) - Highly anticipated upcoming release on CineVault.`,
-            releaseDate: it.year ? `${it.year}-07-01` : '2026-07-01',
-            year: parseInt(it.year || '2026', 10),
-            rating: data.metrics?.[it.id.value]?.rating || 9.0,
-            quality: '4K' as const,
-            genres: [{ id: 'g-upcoming', name: 'Upcoming', slug: 'upcoming' }],
-            language: 'English',
-            status: 'upcoming' as const,
-          }));
+          .map((it) => {
+            const metricRating = data.metrics?.[it.id.value]?.rating;
+            const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+            return {
+              id: `mb-${it.id.value}`,
+              externalId: it.id.value,
+              title: it.title,
+              slug: `mb-${it.id.value}`,
+              contentType: (it.media_type === 'series' ? 'tv' : 'movie') as 'movie' | 'tv',
+              posterUrl: it.poster_url || '/images/neutral-poster.svg',
+              backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+              description: `${it.title} (${it.year || '2026'}) - Highly anticipated upcoming release on CineVault.`,
+              releaseDate: it.year ? `${it.year}-07-01` : '2026-07-01',
+              year: parseInt(it.year || '2026', 10),
+              rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+              genres: [{ id: 'g-upcoming', name: 'Upcoming', slug: 'upcoming' }],
+              language: 'English',
+              status: 'upcoming' as const,
+            };
+          });
         setLiveUpcoming(upcoming2026);
       }
-    }).catch(() => {});
+      setLoading(false);
+    }).catch(() => {
+      if (isMounted) setLoading(false);
+    });
 
     return () => {
       isMounted = false;
@@ -68,23 +74,7 @@ export default function UpcomingPage() {
   }, []);
 
   const allUpcoming = useMemo(() => {
-    // Seed upcoming (items with year >= 2026)
-    const seedUpcoming = SEED_CONTENT.filter(
-      (item) => item.year >= 2026 || (item.releaseDate && item.releaseDate.startsWith('2026'))
-    );
-
-    const merged = [...liveUpcoming, ...seedUpcoming];
-    const seenIds = new Set<string>();
-    const unique: ContentItem[] = [];
-
-    for (const it of merged) {
-      if (!seenIds.has(it.id)) {
-        seenIds.add(it.id);
-        unique.push(it);
-      }
-    }
-
-    return unique;
+    return liveUpcoming;
   }, [liveUpcoming]);
 
   const filteredItems = useMemo(() => {
@@ -100,7 +90,7 @@ export default function UpcomingPage() {
     }
 
     if (selectedCategory === 'blockbusters') {
-      list = list.filter((m) => m.rating >= 8.8 || m.quality === '4K');
+      list = list.filter((m) => (m.rating !== undefined && m.rating >= 8.8) || m.quality === '4K');
     } else if (selectedCategory === 'action') {
       list = list.filter((m) =>
         m.genres.some((g) => g.slug === 'action' || g.slug === 'sci-fi')

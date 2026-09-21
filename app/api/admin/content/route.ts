@@ -3,7 +3,7 @@ import { verifyAdminRequest } from '@/lib/auth/admin-guard';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { getServerClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
+import { movieboxApi } from '@/lib/api/moviebox-client';
 import { ContentItem } from '@/types/content';
 import crypto from 'crypto';
 
@@ -45,13 +45,13 @@ export async function GET(request: NextRequest) {
           title: row.title,
           contentType: row.content_type || 'movie',
           slug: row.slug || row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-          posterUrl: row.poster_url || '',
-          backdropUrl: row.backdrop_url || '',
+          posterUrl: row.poster_url || '/images/neutral-poster.svg',
+          backdropUrl: row.backdrop_url || '/images/neutral-backdrop.svg',
           description: row.description || '',
           year: row.year || (row.release_date ? new Date(row.release_date).getFullYear() : 2024),
-          rating: row.rating ? parseFloat(row.rating) : 8.0,
-          quality: row.quality || '1080p',
-          releaseDate: row.release_date || `${row.year || 2024}-01-01`,
+          rating: row.rating ? parseFloat(row.rating) : undefined,
+          quality: row.quality || undefined,
+          releaseDate: row.release_date || (row.year ? `${row.year}-01-01` : ''),
           language: row.language || 'English',
           status: (row.status as any) || 'released',
           genres: [],
@@ -62,7 +62,33 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. Merge: DB items, runtime additions, and SEED_CONTENT (ensuring no duplicates)
+  // 2. Fetch provider items from upstream MovieBox gateway
+  let providerItems: ContentItem[] = [];
+  try {
+    const feed = await movieboxApi.homepage('all', 1);
+    if (feed?.items) {
+      providerItems = feed.items.map((it) => ({
+        id: `mb-${it.id.value}`,
+        externalId: it.id.value,
+        title: it.title,
+        contentType: it.media_type === 'series' ? 'tv' : 'movie',
+        slug: `mb-${it.id.value}`,
+        posterUrl: it.poster_url || '/images/neutral-poster.svg',
+        backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+        description: `${it.title} - CineVault Stream`,
+        year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+        rating: undefined,
+        releaseDate: it.year ? `${it.year}-01-01` : '',
+        language: 'English',
+        status: 'released',
+        genres: [],
+      }));
+    }
+  } catch (e) {
+    // ignore upstream fetch failures gracefully
+  }
+
+  // 3. Merge: DB items, runtime additions, and providerItems (ensuring no duplicates)
   const merged: ContentItem[] = [];
   const seenIds = new Set<string>();
   const seenSlugs = new Set<string>();
@@ -90,12 +116,12 @@ export async function GET(request: NextRequest) {
     addItemIfUnique(item);
   }
 
-  // Add SEED_CONTENT items
-  for (const item of SEED_CONTENT) {
+  // Add provider items
+  for (const item of providerItems) {
     addItemIfUnique(item);
   }
 
-  // 3. Apply Filters
+  // 4. Apply Filters
   let filtered = merged;
 
   if (contentType !== 'all') {
@@ -111,7 +137,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 4. Pagination
+  // 5. Pagination
   const total = filtered.length;
   const totalPages = Math.max(Math.ceil(total / limit), 1);
   const start = (page - 1) * limit;
@@ -153,10 +179,9 @@ export async function POST(request: NextRequest) {
       slug: title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: description || 'Synopsis pending.',
       year: year || new Date().getFullYear(),
-      rating: rating || 8.0,
-      posterUrl: posterUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500',
-      backdropUrl: backdropUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600',
-      quality: '1080p',
+      rating: rating ? Number(rating) : undefined,
+      posterUrl: posterUrl || '/images/neutral-poster.svg',
+      backdropUrl: backdropUrl || '/images/neutral-backdrop.svg',
       releaseDate: `${year || new Date().getFullYear()}-01-01`,
       language: 'English',
       status: 'released',

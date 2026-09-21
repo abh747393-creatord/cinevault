@@ -82,16 +82,14 @@ export default function DramasPage() {
       title: cleanTitle || it.title,
       slug: `mb-${rawId}`,
       contentType: isSeries ? 'tv' : 'movie',
-      posterUrl: it.poster_url || '',
-      backdropUrl: it.poster_url || '',
-      description: `${cleanTitle} (${it.year || 'Drama Series'}) - High-definition streaming with authentic audio tracks, multi-language dubs, and complete season archives.`,
+      posterUrl: it.poster_url || '/images/neutral-poster.svg',
+      backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+      description: `${cleanTitle || it.title} (${it.year || 'Drama Series'})`,
       releaseDate: it.year ? `${it.year}-01-01` : '',
       year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-      rating: hasHindi ? 9.5 : 9.2,
       genres,
       status: 'released',
       language: isPakistani ? 'Urdu' : isTurkish ? 'Turkish' : isKdrama ? 'Korean' : 'Multi',
-      quality: '1080p',
       availableAudio,
       availableSubtitles: ['English', 'Urdu', 'Hindi'],
     };
@@ -162,7 +160,7 @@ export default function DramasPage() {
     return activeItems.filter((item) => {
       const titleLower = item.title.toLowerCase();
       if (selectedCategory === 'hits') {
-        return item.rating >= 9.3 || titleLower.includes('squid') || titleLower.includes('queen') || titleLower.includes('bin');
+        return (item.rating !== undefined && item.rating >= 9.3) || titleLower.includes('squid') || titleLower.includes('queen') || titleLower.includes('bin');
       }
       if (selectedCategory === 'kdrama') {
         return (

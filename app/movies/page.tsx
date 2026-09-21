@@ -6,7 +6,7 @@ import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
-import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
+import { GENRES } from '@/lib/constants/genres';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
 
 let cachedLiveMovies: ContentItem[] | null = null;
@@ -19,37 +19,46 @@ export default function MoviesPage() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [liveMovies, setLiveMovies] = useState<ContentItem[]>(() => cachedLiveMovies || []);
+  const [loading, setLoading] = useState(() => !cachedLiveMovies);
 
   useEffect(() => {
     let isMounted = true;
     if (cachedLiveMovies && cachedLiveMovies.length > 0) return;
 
+    setLoading(true);
     import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
       movieboxApi.homepage('movie', 1).then((data) => {
         if (!isMounted) return;
         if (data && data.items && data.items.length > 0) {
           const mapped: ContentItem[] = data.items
             .filter((it) => it.media_type !== 'series')
-            .map((it) => ({
-            id: `mb-${it.id.value}`,
-            externalId: it.id.value,
-            title: it.title,
-            slug: `mb-${it.id.value}`,
-            contentType: 'movie',
-            posterUrl: it.poster_url || '',
-            backdropUrl: it.poster_url || '',
-            description: `${it.title} (${it.year || 'Feature Film'})`,
-            releaseDate: it.year ? `${it.year}-01-01` : '',
-            year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-            rating: data.metrics?.[it.id.value]?.rating || 8.0,
-            genres: [],
-            language: 'English',
-            status: 'released',
-          }));
+            .map((it) => {
+              const metricRating = data.metrics?.[it.id.value]?.rating;
+              const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+              return {
+                id: `mb-${it.id.value}`,
+                externalId: it.id.value,
+                title: it.title,
+                slug: `mb-${it.id.value}`,
+                contentType: 'movie',
+                posterUrl: it.poster_url || '/images/neutral-poster.svg',
+                backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+                description: `${it.title} (${it.year || 'Feature Film'})`,
+                releaseDate: it.year ? `${it.year}-01-01` : '',
+                year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+                rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+                genres: [],
+                language: 'English',
+                status: 'released',
+              };
+            });
           cachedLiveMovies = mapped;
           setLiveMovies(mapped);
         }
-      }).catch(() => {});
+        setLoading(false);
+      }).catch(() => {
+        if (isMounted) setLoading(false);
+      });
     });
     return () => {
       isMounted = false;
@@ -57,17 +66,7 @@ export default function MoviesPage() {
   }, []);
 
   const filteredMovies = useMemo(() => {
-    const providerSeed = SEED_CONTENT.filter((c) => c.contentType === 'movie' && !c.id.startsWith('c-'));
-    const combined = liveMovies.length > 0 ? [...liveMovies, ...providerSeed] : providerSeed;
-    const seen = new Set<string>();
-    let list: ContentItem[] = [];
-    for (const item of combined) {
-      const key = item.externalId || item.id;
-      if (!seen.has(key)) {
-        seen.add(key);
-        list.push(item);
-      }
-    }
+    let list: ContentItem[] = [...liveMovies];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -90,12 +89,12 @@ export default function MoviesPage() {
     if (filters.sortBy === 'latest') {
       list.sort((a, b) => b.year - a.year);
     } else if (filters.sortBy === 'rating') {
-      list.sort((a, b) => b.rating - a.rating);
+      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (filters.sortBy === 'alphabetical') {
       list.sort((a, b) => a.title.localeCompare(b.title));
     } else {
       // Popular / default
-      list.sort((a, b) => b.rating - a.rating);
+      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     }
 
     return list;
@@ -111,7 +110,7 @@ export default function MoviesPage() {
             Movies Catalog
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Browse full-length feature films, open cinema masterpieces, and cinematic projects.
+            Browse full-length feature films streaming directly from genuine provider sources.
           </p>
         </div>
 
@@ -137,7 +136,7 @@ export default function MoviesPage() {
         {/* Desktop Sidebar Filter Panel */}
         <div className="hidden md:block col-span-1 sticky top-24">
           <FilterPanel
-            genres={SEED_GENRES}
+            genres={GENRES}
             filters={filters}
             onChange={setFilters}
           />
@@ -158,7 +157,7 @@ export default function MoviesPage() {
                 </Button>
               </div>
               <FilterPanel
-                genres={SEED_GENRES}
+                genres={GENRES}
                 filters={filters}
                 onChange={(f) => {
                   setFilters(f);
@@ -171,7 +170,12 @@ export default function MoviesPage() {
 
         {/* Movies Grid */}
         <div className="col-span-1 md:col-span-3">
-          {filteredMovies.length > 0 ? (
+          {loading && liveMovies.length === 0 ? (
+            <div className="py-24 flex flex-col items-center justify-center space-y-3">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-400 text-xs font-medium">Loading genuine provider catalog...</p>
+            </div>
+          ) : filteredMovies.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {filteredMovies.map((movie) => (
                 <ContentCard

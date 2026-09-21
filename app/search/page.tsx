@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { IconMagnifer, IconClapperboardPlay, IconTV, IconStars, IconAlertCircle } from '@/components/ui/icons';
 import { SearchBar } from '@/components/search/search-bar';
 import { ContentCard } from '@/components/cards/content-card';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { ContentType, ContentItem } from '@/types/content';
 
 function SearchContent() {
@@ -13,7 +12,7 @@ function SearchContent() {
   const queryParam = searchParams.get('q') || '';
   const [query, setQuery] = useState(queryParam);
   const [activeTab, setActiveTab] = useState<'all' | ContentType>('all');
-  const [liveResults, setLiveResults] = useState<ContentItem[]>([]);
+  const [searchResults, setSearchResults] = useState<ContentItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
@@ -25,7 +24,7 @@ function SearchContent() {
   useEffect(() => {
     const q = query.trim();
     if (!q) {
-      setLiveResults([]);
+      setSearchResults([]);
       setIsSearching(false);
       return;
     }
@@ -42,17 +41,16 @@ function SearchContent() {
             title: r.title,
             slug: r.id,
             contentType: r.contentType,
-            posterUrl: r.posterUrl || '',
-            backdropUrl: r.posterUrl || '',
+            posterUrl: r.posterUrl || '/images/neutral-poster.svg',
+            backdropUrl: r.posterUrl || '/images/neutral-backdrop.svg',
             description: r.overview || '',
             releaseDate: r.year ? `${r.year}-01-01` : '',
             year: r.year || 2024,
-            rating: 7.8,
             genres: [],
             language: 'English',
             status: 'released',
           }));
-          setLiveResults(mapped);
+          setSearchResults(mapped);
           setIsSearching(false);
         }).catch(() => {
           if (isMounted) setIsSearching(false);
@@ -66,42 +64,6 @@ function SearchContent() {
     };
   }, [query]);
 
-  const searchResults = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    if (!q) return [];
-
-    const localMatches = SEED_CONTENT.filter((item) => {
-      const matchesTitle = item.title.toLowerCase().includes(q);
-      const matchesDesc = item.description.toLowerCase().includes(q);
-      const matchesOrig = item.originalTitle?.toLowerCase().includes(q);
-      const matchesGenre = item.genres.some((g) => g.name.toLowerCase().includes(q));
-      const matchesCast = item.cast?.some((c) => c.toLowerCase().includes(q));
-      const matchesDirector = item.director?.toLowerCase().includes(q);
-
-      return (
-        matchesTitle ||
-        matchesDesc ||
-        matchesOrig ||
-        matchesGenre ||
-        matchesCast ||
-        matchesDirector
-      );
-    });
-
-    // Prioritize live provider-backed results from Sign Ultra VIP Cinema
-    const combined = [...liveResults];
-    const seenTitles = new Set(liveResults.map((m) => m.title.toLowerCase()));
-
-    for (const r of localMatches) {
-      if (!seenTitles.has(r.title.toLowerCase())) {
-        seenTitles.add(r.title.toLowerCase());
-        combined.push(r);
-      }
-    }
-
-    return combined;
-  }, [query, liveResults]);
-
   const filteredResults = useMemo(() => {
     if (activeTab === 'all') return searchResults;
     return searchResults.filter((item) => item.contentType === activeTab);
@@ -112,13 +74,12 @@ function SearchContent() {
   const animeCount = searchResults.filter((i) => i.contentType === 'anime').length;
 
   const suggestedTerms = [
-    'Tears of Steel',
-    'Sintel',
-    'Kyoto Blade',
-    'Big Buck Bunny',
-    'Cosmos Laundromat',
-    'Sci-Fi',
-    'Animation',
+    'Inception',
+    'Attack on Titan',
+    'Breaking Bad',
+    'Interstellar',
+    'Demon Slayer',
+    'Stranger Things',
   ];
 
   return (
@@ -198,7 +159,12 @@ function SearchContent() {
       )}
 
       {/* Search Results Grid */}
-      {query.trim() ? (
+      {isSearching ? (
+        <div className="py-24 flex flex-col items-center justify-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-xs font-medium">Searching live provider catalog...</p>
+        </div>
+      ) : query.trim() ? (
         filteredResults.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
             {filteredResults.map((item) => (
@@ -212,7 +178,7 @@ function SearchContent() {
               No results found for &ldquo;{query}&rdquo;
             </h3>
             <p className="text-xs text-slate-400">
-              We couldn&apos;t find matching titles in the catalog. Try searching for one of our featured titles like &ldquo;Tears of Steel&rdquo; or &ldquo;Kyoto Blade&rdquo;.
+              No titles match your search. Please check your spelling or try another title or keyword.
             </p>
           </div>
         )

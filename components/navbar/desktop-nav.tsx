@@ -260,17 +260,11 @@ export function DesktopNav() {
               <div className="absolute right-0 mt-3 w-80 bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-4 z-50 animate-scale-up">
                 <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <h4 className="text-sm font-semibold text-white">Notifications</h4>
-                  <Badge variant="primary" size="sm">2 New</Badge>
+                  <Badge variant="outline" size="sm">System</Badge>
                 </div>
-                <div className="py-2 space-y-2">
-                  <div className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-xs space-y-1">
-                    <p className="text-white font-medium">New Release: Kyoto Blade Season 1</p>
-                    <p className="text-slate-400">All 3 episodes are now streaming in 4K with Japanese & English audio.</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-xs space-y-1">
-                    <p className="text-white font-medium">Continue Watching</p>
-                    <p className="text-slate-400">You were watching Tears of Steel (82% remaining).</p>
-                  </div>
+                <div className="py-4 text-center space-y-1">
+                  <p className="text-xs text-slate-300 font-medium">All systems operational</p>
+                  <p className="text-[11px] text-slate-500">You are up to date with the latest streams.</p>
                 </div>
               </div>
             )}

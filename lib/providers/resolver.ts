@@ -1,11 +1,9 @@
 import { ContentProvider } from './provider-interface';
 import { MovieBoxProvider } from './moviebox-provider';
 import { LocalDbProvider } from './local-db-provider';
-import { OpenSourceProvider } from './open-source-provider';
 import { TmdbAdapter } from './tmdb-adapter';
 import { ContentItem, Episode } from '@/types/content';
 import { StreamSource, ProviderSearchResult, ProviderMetadata } from '@/types/providers';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 
 class ProviderResolver {
   private providers: ContentProvider[] = [];
@@ -14,7 +12,6 @@ class ProviderResolver {
     this.providers = [
       new MovieBoxProvider(),
       new LocalDbProvider(),
-      new OpenSourceProvider(),
       new TmdbAdapter(),
     ].sort((a, b) => a.priority - b.priority);
   }
@@ -37,18 +34,7 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getMovie failed:`, err);
       }
     }
-    // Final fallback: Seed database (matching by ID, slug, stripped prefix, or externalId)
-    const cleanId = idOrSlug.replace(/^mb-/, '');
-    return SEED_CONTENT.find((c) => {
-      const cCleanId = c.id.replace(/^mb-/, '');
-      const cExtId = c.externalId?.replace(/^mb-/, '');
-      return (
-        c.id === idOrSlug ||
-        c.slug === idOrSlug ||
-        cCleanId === cleanId ||
-        (cExtId && cExtId === cleanId)
-      ) && c.contentType === 'movie';
-    }) || null;
+    return null;
   }
 
   async resolveTvShow(idOrSlug: string): Promise<ContentItem | null> {
@@ -61,18 +47,7 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getTvShow failed:`, err);
       }
     }
-    // Final fallback: Seed database (matching by ID, slug, stripped prefix, or externalId)
-    const cleanId = idOrSlug.replace(/^mb-/, '');
-    return SEED_CONTENT.find((c) => {
-      const cCleanId = c.id.replace(/^mb-/, '');
-      const cExtId = c.externalId?.replace(/^mb-/, '');
-      return (
-        c.id === idOrSlug ||
-        c.slug === idOrSlug ||
-        cCleanId === cleanId ||
-        (cExtId && cExtId === cleanId)
-      ) && (c.contentType === 'tv' || c.contentType === 'anime');
-    }) || null;
+    return null;
   }
 
   async resolveEpisodes(contentId: string, seasonNumber: number = 1): Promise<Episode[]> {
@@ -85,19 +60,7 @@ class ProviderResolver {
         console.warn(`[Provider ${provider.slug}] getEpisodes failed:`, err);
       }
     }
-    const cleanId = contentId.replace(/^mb-/, '');
-    const show = SEED_CONTENT.find((c) => {
-      const cCleanId = c.id.replace(/^mb-/, '');
-      const cExtId = c.externalId?.replace(/^mb-/, '');
-      return (
-        c.id === contentId ||
-        c.slug === contentId ||
-        cCleanId === cleanId ||
-        (cExtId && cExtId === cleanId)
-      );
-    });
-    const season = show?.seasons?.find((s) => s.seasonNumber === seasonNumber) || show?.seasons?.[0];
-    return season?.episodes || [];
+    return [];
   }
 
   async resolveStreams(contentId: string, episodeId?: string, dubId?: string): Promise<StreamSource[]> {

@@ -63,7 +63,7 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
     ? `/movie/${current.slug}`
     : `/tv/${current.slug}`;
 
-  const fallbackBackdrop = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80';
+  const fallbackBackdrop = '/images/neutral-backdrop.svg';
   const [backdropSrc, setBackdropSrc] = useState(current.backdropUrl || fallbackBackdrop);
 
   useEffect(() => {
@@ -97,10 +97,12 @@ export function HeroBanner({ featuredItems, onOpenInfo }: HeroBannerProps) {
             Featured {current.contentType.toUpperCase()}
           </Badge>
 
-          <Badge variant="rating" size="sm" className="flex items-center gap-1">
-            <IconStar className="w-3 h-3 text-amber-300" variant="Bold" />
-            {current.rating}
-          </Badge>
+          {current.rating !== undefined && current.rating > 0 && (
+            <Badge variant="rating" size="sm" className="flex items-center gap-1">
+              <IconStar className="w-3 h-3 text-amber-300" variant="Bold" />
+              {current.rating.toFixed(1)}
+            </Badge>
+          )}
 
           {current.ageRating && (
             <Badge variant="outline" size="sm">

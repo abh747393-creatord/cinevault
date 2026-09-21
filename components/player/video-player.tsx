@@ -170,6 +170,7 @@ export interface UnifiedSubtitleTrack {
 }
 
 export interface DashVideoQualityOption {
+  representationId: string;
   qualityIndex: number;
   height: number;
   width: number;
@@ -279,6 +280,7 @@ export function VideoPlayer({
   const [dashTextTracks, setDashTextTracks] = useState<any[]>([]);
   const [dashVideoQualities, setDashVideoQualities] = useState<DashVideoQualityOption[]>([]);
   const [currentQualityIndex, setCurrentQualityIndex] = useState<number>(-1);
+  const [currentRepresentationId, setCurrentRepresentationId] = useState<string | null>(null);
   const [activeQualityLabel, setActiveQualityLabel] = useState<string>('Auto');
   const [isAutoQuality, setIsAutoQuality] = useState<boolean>(true);
   const [showQualityMenu, setShowQualityMenu] = useState<boolean>(false);
@@ -611,8 +613,17 @@ export function VideoPlayer({
     if (option === 'auto') {
       if (dashPlayerRef.current) {
         try {
-          dashPlayerRef.current.setAutoSwitchQualityFor('video', true);
-          console.info('[DASH ABR] Switched to AUTO adaptive bitrate mode');
+          dashPlayerRef.current.updateSettings({
+            streaming: {
+              abr: {
+                autoSwitchBitrate: { video: true },
+              },
+            },
+          });
+          if (typeof dashPlayerRef.current.setAutoSwitchQualityFor === 'function') {
+            dashPlayerRef.current.setAutoSwitchQualityFor('video', true);
+          }
+          console.info('[DASH ABR] QUALITY CLICK: switched to AUTO adaptive bitrate mode');
         } catch (err) {
           console.warn('[VideoPlayer] Failed to enable auto quality:', err);
         }
@@ -624,15 +635,38 @@ export function VideoPlayer({
     } else {
       if (dashPlayerRef.current) {
         try {
-          dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
-          dashPlayerRef.current.setQualityFor('video', option.qualityIndex);
-          console.info(`[DASH ABR] User manually locked quality to index ${option.qualityIndex} (${option.label})`);
+          // Disable auto-switch for video
+          dashPlayerRef.current.updateSettings({
+            streaming: {
+              abr: {
+                autoSwitchBitrate: { video: false },
+              },
+            },
+          });
+          if (typeof dashPlayerRef.current.setAutoSwitchQualityFor === 'function') {
+            dashPlayerRef.current.setAutoSwitchQualityFor('video', false);
+          }
+
+          // In dash.js v5, setRepresentationForTypeById or setRepresentationForTypeByIndex is used
+          // forceReplace is set to false to prevent disruptive playhead buffer evictions
+          if (typeof dashPlayerRef.current.setRepresentationForTypeById === 'function' && option.representationId) {
+            dashPlayerRef.current.setRepresentationForTypeById('video', option.representationId, false);
+          } else if (typeof dashPlayerRef.current.setRepresentationForTypeByIndex === 'function') {
+            dashPlayerRef.current.setRepresentationForTypeByIndex('video', option.qualityIndex, false);
+          } else if (typeof dashPlayerRef.current.setQualityFor === 'function') {
+            dashPlayerRef.current.setQualityFor('video', option.qualityIndex);
+          }
+
+          console.info(
+            `[DASH ABR] QUALITY CLICK: { mode: "manual", label: "${option.label}", representationId: "${option.representationId}", height: ${option.height}, bitrate: ${option.bitrate} }`
+          );
         } catch (err) {
           console.warn('[VideoPlayer] Failed to set video quality:', err);
         }
       }
       setIsAutoQuality(false);
       setCurrentQualityIndex(option.qualityIndex);
+      setCurrentRepresentationId(option.representationId);
       setActiveQualityLabel(option.label);
       setShowQualityMenu(false);
       setShowSettingsMenu(false);
@@ -643,13 +677,19 @@ export function VideoPlayer({
   const displayedQualityBadge = useMemo(() => {
     if (dashVideoQualities.length > 0) {
       if (!isAutoQuality) {
-        return activeQualityLabel.split(' ')[0]; // e.g. "1080p", "720p", "4K"
+        return activeQualityLabel.split(' ')[0]; // e.g. "1080p", "720p", "480p"
       }
-      const currentOpt = dashVideoQualities.find((q) => q.qualityIndex === currentQualityIndex);
+      const currentOpt = dashVideoQualities.find(
+        (q) =>
+          (currentRepresentationId && q.representationId === currentRepresentationId) ||
+          q.qualityIndex === currentQualityIndex
+      );
       return currentOpt ? `Auto (${currentOpt.height > 0 ? `${currentOpt.height}p` : currentOpt.label.split(' ')[0]})` : 'Auto';
     }
-    return currentStream?.quality || 'HD';
-  }, [dashVideoQualities, isAutoQuality, activeQualityLabel, currentQualityIndex, currentStream]);
+    return currentStream?.quality && !['auto', 'adaptive'].includes(currentStream.quality.toLowerCase())
+      ? currentStream.quality
+      : 'HD';
+  }, [dashVideoQualities, isAutoQuality, activeQualityLabel, currentQualityIndex, currentRepresentationId, currentStream]);
 
   // Initialize dash.js for MPEG-DASH streams or native HTML5 for direct files
   useEffect(() => {
@@ -690,18 +730,24 @@ export function VideoPlayer({
             },
             streaming: {
               lowLatencyEnabled: false,
-              fastSwitchEnabled: true,
+              fastSwitchEnabled: false, // Disabling fast switch prevents media eviction near playhead that causes 1-second micro-stalls
               buffer: {
-                bufferPruningInterval: 5,
-                bufferToKeep: 10, // Keep 10 seconds behind playback
-                bufferTimeDefault: 12, // 12 seconds forward buffer (healthy, smooth, avoids stalls on jitter)
-                bufferTimeAtTopQuality: 20, // 20 seconds forward buffer when at 1080p (absorbs larger chunk sizes)
-                bufferTimeAtTopQualityLongForm: 24, // 24 seconds for long movies
-                longFormContentDurationThreshold: 600, // 10 minutes threshold for movies
-                flushBufferAtTrackSwitch: true, // Flush old buffers on audio/quality switch
-                resetSourceBuffersForTrackSwitch: true, // Reset SourceBuffers on track switch
-                reuseExistingSourceBuffers: false, // Do not accumulate old allocations
-                enableSeekDecorrelationFix: true,
+                bufferPruningInterval: 30, // Prune only every 30s to eliminate MSE thread remove/append lock contention
+                bufferToKeep: 30, // Keep 30s behind playback for smooth backward scrubbing
+                bufferTimeDefault: 18, // 18 seconds (3x 6s segments) forward cushion
+                bufferTimeAtTopQuality: 24, // 24 seconds (4x 6s segments) at 1080p to absorb network variance
+                bufferTimeAtTopQualityLongForm: 30, // 30 seconds for full-length films
+                longFormContentDurationThreshold: 600, // 10 minutes threshold
+                flushBufferAtTrackSwitch: false, // Never flush the forward buffer on quality switch
+                resetSourceBuffersForTrackSwitch: false, // Keep SourceBuffers intact without recreation
+                reuseExistingSourceBuffers: true, // Reuse existing SourceBuffers to prevent decoder teardown
+                enableSeekDecorrelationFix: false, // VOD streams do not need live seek decorrelation
+              },
+              gaps: {
+                jumpGaps: true, // Automatically jump micro PTS gaps between segments (<0.3s)
+                jumpLargeGaps: true,
+                smallGapLimit: 1.5,
+                threshold: 0.3,
               },
               retryAttempts: {
                 MPD: 3,
@@ -721,6 +767,7 @@ export function VideoPlayer({
                 initialBitrate: {
                   video: -1, // Dynamic ABR start: prevents forced 1080p startup buffering stalls
                 },
+                bandwidthSafetyFactor: 0.85, // 15% headroom prevents oscillation between 720p and 1080p
               },
             },
           });
@@ -746,40 +793,71 @@ export function VideoPlayer({
 
           const updateQualitiesFromPlayer = () => {
             try {
-              const bitrates = player.getBitrateInfoListFor('video');
-              if (bitrates && bitrates.length > 0) {
-                const opts: DashVideoQualityOption[] = bitrates.map((b: any, idx: number) => {
-                  const h = b.height || 0;
-                  let label = h > 0 ? `${h}p` : `${Math.round((b.bitrate || 0) / 1000)}k`;
-                  if (h >= 2160) label = '2160p (4K)';
-                  else if (h >= 1440) label = '1440p (2K)';
-                  else if (h >= 1080) label = '1080p (FHD)';
-                  else if (h >= 720) label = '720p (HD)';
-                  else if (h >= 480) label = '480p (SD)';
-                  return {
-                    qualityIndex: typeof b.qualityIndex === 'number' ? b.qualityIndex : idx,
-                    height: h,
-                    width: b.width || 0,
-                    bitrate: b.bitrate || 0,
-                    label,
-                  };
-                });
-                // Sort descending by height or bitrate
-                opts.sort((a, b) => (b.height || b.bitrate) - (a.height || a.bitrate));
+              let reps: any[] = [];
+              if (typeof player.getRepresentationsByType === 'function') {
+                reps = player.getRepresentationsByType('video') || [];
+              }
+              if (!reps || reps.length === 0) {
+                if (typeof player.getRepresentationsByTypeUnfiltered === 'function') {
+                  reps = player.getRepresentationsByTypeUnfiltered('video') || [];
+                }
+              }
+              if (!reps || reps.length === 0) {
+                if (typeof player.getBitrateInfoListFor === 'function') {
+                  reps = player.getBitrateInfoListFor('video') || [];
+                }
+              }
+
+              if (reps && reps.length > 0) {
+                const opts: DashVideoQualityOption[] = reps
+                  .map((r: any, idx: number) => {
+                    const h = r.height || 0;
+                    const w = r.width || 0;
+                    const bitrate = r.bandwidth || (r.bitrateInKbit ? r.bitrateInKbit * 1000 : (r.bitrate || 0));
+                    let label = h > 0 ? `${h}p` : `${Math.round(bitrate / 1000)}k`;
+                    if (h >= 2160) label = '2160p (4K)';
+                    else if (h >= 1440) label = '1440p (2K)';
+                    else if (h >= 1080) label = '1080p (FHD)';
+                    else if (h >= 720) label = '720p (HD)';
+                    else if (h >= 480) label = '480p (SD)';
+
+                    return {
+                      representationId: r.id != null ? String(r.id) : String(idx),
+                      qualityIndex: typeof r.index === 'number' ? r.index : (typeof r.qualityIndex === 'number' ? r.qualityIndex : idx),
+                      height: h,
+                      width: w,
+                      bitrate,
+                      label,
+                    };
+                  })
+                  .filter((o) => {
+                    const l = o.label.toLowerCase();
+                    return !l.includes('auto') && !l.includes('adaptive');
+                  });
+
+                // Sort descending by height, then by bitrate
+                opts.sort((a, b) => (b.height || 0) - (a.height || 0) || (b.bitrate || 0) - (a.bitrate || 0));
                 setDashVideoQualities(opts);
 
-                const isAuto = player.getAutoSwitchQualityFor('video');
-                setIsAutoQuality(isAuto);
-                const currQ = player.getQualityFor('video');
-                setCurrentQualityIndex(currQ);
+                // Update current representation from player
+                if (typeof player.getCurrentRepresentationForType === 'function') {
+                  const currRep = player.getCurrentRepresentationForType('video');
+                  if (currRep) {
+                    if (currRep.id != null) setCurrentRepresentationId(String(currRep.id));
+                    if (typeof currRep.index === 'number') setCurrentQualityIndex(currRep.index);
+                  }
+                } else if (typeof player.getQualityFor === 'function') {
+                  const currQ = player.getQualityFor('video');
+                  if (typeof currQ === 'number') setCurrentQualityIndex(currQ);
+                }
               }
             } catch (e) {
-              console.warn('[Dash.js] Failed to get video bitrate list:', e);
+              console.warn('[Dash.js] Failed to get video representations:', e);
             }
           };
 
           player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
-            console.warn('Dash.js error:', e);
+            console.warn('[DASH ABR] Error event:', e);
             handleVideoError();
           });
 
@@ -796,9 +874,9 @@ export function VideoPlayer({
             updateQualitiesFromPlayer();
 
             try {
-              const bitrates = player.getBitrateInfoListFor('video');
-              const currQ = player.getQualityFor('video');
-              console.info(`[DASH ABR] Stream initialized. Discovered ${bitrates?.length || 0} representations. Active quality index: ${currQ}`);
+              const reps = typeof player.getRepresentationsByType === 'function' ? player.getRepresentationsByType('video') : [];
+              const currRep = typeof player.getCurrentRepresentationForType === 'function' ? player.getCurrentRepresentationForType('video') : null;
+              console.info(`[DASH ABR] Stream initialized. Discovered ${reps?.length || 0} representations. Active representation: ${currRep?.id ?? 'auto'}`);
             } catch {}
           });
 
@@ -817,10 +895,11 @@ export function VideoPlayer({
           player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_REQUESTED, (e: any) => {
             if (e && e.mediaType === 'video') {
               try {
-                const bitrates = player.getBitrateInfoListFor('video');
-                const target = bitrates?.[e.newQuality];
+                const rep = e.newRepresentation;
+                const oldRep = e.oldRepresentation;
+                const bufLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
                 console.info(
-                  `[DASH ABR] Quality switch requested: Index ${e.oldQuality} -> ${e.newQuality} (${target?.height || 0}p, ${Math.round((target?.bitrate || 0) / 1000)} kbps). Reason: ${e.reason || 'ABR'}`
+                  `[DASH ABR] Quality switch requested: ${oldRep?.id ?? '?'} -> ${rep?.id ?? '?'} (${rep?.height || 0}p, ${Math.round((rep?.bandwidth || 0) / 1000)} kbps). Reason: ${e.reason?.name || e.reason || 'ABR'}. Buffer ahead: ${typeof bufLen === 'number' ? bufLen.toFixed(1) + 's' : 'N/A'}`
                 );
               } catch {}
             }
@@ -828,15 +907,28 @@ export function VideoPlayer({
 
           player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e: any) => {
             if (e && e.mediaType === 'video') {
-              setCurrentQualityIndex(e.newQuality);
               try {
-                const bitrates = player.getBitrateInfoListFor('video');
-                const rendered = bitrates?.[e.newQuality];
-                const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
-                console.info(
-                  `[DASH ABR] Quality change rendered: Index ${e.newQuality} (${rendered?.height || 0}p, ${Math.round((rendered?.bitrate || 0) / 1000)} kbps). Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
-                );
+                const rep = e.newRepresentation;
+                if (rep) {
+                  if (rep.id != null) setCurrentRepresentationId(String(rep.id));
+                  if (typeof rep.index === 'number') setCurrentQualityIndex(rep.index);
+                  const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+                  console.info(
+                    `[DASH ABR] Quality change rendered: ID ${rep.id} (${rep.height || 0}p, ${Math.round((rep.bandwidth || 0) / 1000)} kbps). Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
+                  );
+                } else if (typeof e.newQuality === 'number') {
+                  setCurrentQualityIndex(e.newQuality);
+                }
               } catch {}
+            }
+          });
+
+          player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_STARTED, (e: any) => {
+            if (e && e.mediaType === 'video' && e.request) {
+              const buf = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+              console.debug(
+                `[DASH ABR] Fragment load started: #${e.request.index} (dur: ${e.request.duration ? e.request.duration.toFixed(1) + 's' : 'N/A'}, quality: ${e.request.quality}, bufferAhead: ${typeof buf === 'number' ? buf.toFixed(1) + 's' : 'N/A'})`
+              );
             }
           });
 
@@ -845,14 +937,25 @@ export function VideoPlayer({
               try {
                 const throughput = typeof player.getAverageThroughput === 'function' ? player.getAverageThroughput('video') : null;
                 const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
-                // Periodic diagnostic sampling or on low buffer
-                if (Math.random() < 0.2 || (typeof bufferLen === 'number' && bufferLen < 6)) {
-                  console.debug(
-                    `[DASH ABR] Segment loaded. Estimated throughput: ${throughput ? Math.round(throughput) + ' kbps' : 'measuring...'}, Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
-                  );
-                }
+                console.debug(
+                  `[DASH ABR] Fragment loaded. Estimated throughput: ${throughput ? Math.round(throughput) + ' kbps' : 'measuring...'}, Forward buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(1) + 's' : 'N/A'}`
+                );
               } catch {}
             }
+          });
+
+          player.on(dashjs.MediaPlayer.events.BUFFER_EMPTY, (e: any) => {
+            const buf = typeof player.getBufferLength === 'function' ? player.getBufferLength(e?.mediaType || 'video') : null;
+            console.warn(`[DASH ABR] BUFFER_EMPTY on ${e?.mediaType || 'media'}, currentTime: ${videoElement?.currentTime?.toFixed(2)}s, bufferAhead: ${typeof buf === 'number' ? buf.toFixed(2) + 's' : '0s'}`);
+          });
+
+          player.on(dashjs.MediaPlayer.events.BUFFER_LOADED, (e: any) => {
+            const buf = typeof player.getBufferLength === 'function' ? player.getBufferLength(e?.mediaType || 'video') : null;
+            console.debug(`[DASH ABR] BUFFER_LOADED on ${e?.mediaType || 'media'}, bufferAhead: ${typeof buf === 'number' ? buf.toFixed(2) + 's' : 'N/A'}`);
+          });
+
+          player.on(dashjs.MediaPlayer.events.BUFFER_LEVEL_STATE_CHANGED, (e: any) => {
+            console.debug(`[DASH ABR] BUFFER_LEVEL_STATE_CHANGED (${e?.mediaType}): state=${e?.state}`);
           });
 
           player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, () => {
@@ -874,6 +977,16 @@ export function VideoPlayer({
               const currentQ = typeof player.getQualityFor === 'function' ? player.getQualityFor('video') : null;
               console.warn(
                 `[DASH ABR] Playback stalled (waiting). Buffer: ${typeof bufferLen === 'number' ? bufferLen.toFixed(2) + 's' : 'empty'}, Active quality index: ${currentQ}`
+              );
+            } catch {}
+          });
+
+          player.on(dashjs.MediaPlayer.events.PLAYBACK_STALLED, () => {
+            try {
+              const bufferLen = typeof player.getBufferLength === 'function' ? player.getBufferLength('video') : null;
+              const currentQ = typeof player.getQualityFor === 'function' ? player.getQualityFor('video') : null;
+              console.warn(
+                `[DASH ABR] PLAYBACK_STALLED at ${videoElement?.currentTime?.toFixed(2)}s, bufferAhead: ${typeof bufferLen === 'number' ? bufferLen.toFixed(2) + 's' : 'empty'}, quality: ${currentQ}`
               );
             } catch {}
           });
@@ -1939,8 +2052,11 @@ export function VideoPlayer({
                     {/* Auto (Adaptive) Option */}
                     <button
                       type="button"
-                      onClick={() => handleSelectQuality('auto')}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectQuality('auto');
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation cursor-pointer ${
                         isAutoQuality ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                       }`}
                     >
@@ -1954,14 +2070,23 @@ export function VideoPlayer({
                     {/* In-manifest DASH resolutions */}
                     {dashVideoQualities.length > 0 ? (
                       dashVideoQualities.map((q) => {
-                        const isSelected = !isAutoQuality && currentQualityIndex === q.qualityIndex;
-                        const isCurrentlyPlaying = isAutoQuality && currentQualityIndex === q.qualityIndex;
+                        const isSelected =
+                          !isAutoQuality &&
+                          ((currentRepresentationId && q.representationId === currentRepresentationId) ||
+                            currentQualityIndex === q.qualityIndex);
+                        const isCurrentlyPlaying =
+                          isAutoQuality &&
+                          ((currentRepresentationId && q.representationId === currentRepresentationId) ||
+                            currentQualityIndex === q.qualityIndex);
                         return (
                           <button
-                            key={q.qualityIndex}
+                            key={q.representationId || q.qualityIndex}
                             type="button"
-                            onClick={() => handleSelectQuality(q)}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectQuality(q);
+                            }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation cursor-pointer ${
                               isSelected ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
                             }`}
                           >
@@ -1984,25 +2109,28 @@ export function VideoPlayer({
                         );
                       })
                     ) : (
-                      activeStreams.map((s, idx) => {
-                        const isSelected = idx === currentStreamIndex;
-                        return (
-                          <button
-                            key={s.id || idx}
-                            type="button"
-                            onClick={() => {
-                              handleQualityChange(idx);
-                              setShowQualityMenu(false);
-                            }}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation ${
-                              isSelected ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
-                            }`}
-                          >
-                            <span>{s.quality || 'Source'}</span>
-                            {isSelected && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
-                          </button>
-                        );
-                      })
+                      activeStreams
+                        .filter((s) => s.quality && !['auto', 'adaptive'].includes(s.quality.toLowerCase()))
+                        .map((s, idx) => {
+                          const isSelected = !isAutoQuality && idx === currentStreamIndex;
+                          return (
+                            <button
+                              key={s.id || idx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQualityChange(idx);
+                                setShowQualityMenu(false);
+                              }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between touch-manipulation cursor-pointer ${
+                                isSelected ? 'bg-amber-600 text-white font-bold' : 'hover:bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              <span>{s.quality || 'Source'}</span>
+                              {isSelected && <IconCheck className="w-3.5 h-3.5 flex-shrink-0" />}
+                            </button>
+                          );
+                        })
                     )}
                   </div>
                 )}
@@ -2042,8 +2170,11 @@ export function VideoPlayer({
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                         <button
                           type="button"
-                          onClick={() => handleSelectQuality('auto')}
-                          className={`py-1 px-1.5 rounded text-center font-medium ${
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectQuality('auto');
+                          }}
+                          className={`py-1 px-1.5 rounded text-center font-medium cursor-pointer ${
                             isAutoQuality
                               ? 'bg-amber-600 text-white font-bold'
                               : 'bg-white/5 hover:bg-white/10 text-slate-300'
@@ -2052,37 +2183,49 @@ export function VideoPlayer({
                           Auto
                         </button>
                         {dashVideoQualities.length > 0
-                          ? dashVideoQualities.map((q) => (
-                              <button
-                                key={q.qualityIndex}
-                                type="button"
-                                onClick={() => handleSelectQuality(q)}
-                                className={`py-1 px-1.5 rounded text-center font-medium ${
-                                  !isAutoQuality && currentQualityIndex === q.qualityIndex
-                                    ? 'bg-amber-600 text-white font-bold'
-                                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
-                                }`}
-                              >
-                                {q.height > 0 ? `${q.height}p` : q.label.split(' ')[0]}
-                              </button>
-                            ))
-                          : activeStreams.map((s, idx) => (
-                              <button
-                                key={s.id || idx}
-                                type="button"
-                                onClick={() => {
-                                  handleQualityChange(idx);
-                                  setShowSettingsMenu(false);
-                                }}
-                                className={`py-1 px-1.5 rounded text-center font-medium ${
-                                  idx === currentStreamIndex
-                                    ? 'bg-amber-600 text-white font-bold'
-                                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
-                                }`}
-                              >
-                                {s.quality || 'Source'}
-                              </button>
-                            ))}
+                          ? dashVideoQualities.map((q) => {
+                              const isSelected =
+                                !isAutoQuality &&
+                                ((currentRepresentationId && q.representationId === currentRepresentationId) ||
+                                  currentQualityIndex === q.qualityIndex);
+                              return (
+                                <button
+                                  key={q.representationId || q.qualityIndex}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectQuality(q);
+                                  }}
+                                  className={`py-1 px-1.5 rounded text-center font-medium cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-amber-600 text-white font-bold'
+                                      : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                                  }`}
+                                >
+                                  {q.height > 0 ? `${q.height}p` : q.label.split(' ')[0]}
+                                </button>
+                              );
+                            })
+                          : activeStreams
+                              .filter((s) => s.quality && !['auto', 'adaptive'].includes(s.quality.toLowerCase()))
+                              .map((s, idx) => (
+                                <button
+                                  key={s.id || idx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQualityChange(idx);
+                                    setShowSettingsMenu(false);
+                                  }}
+                                  className={`py-1 px-1.5 rounded text-center font-medium cursor-pointer ${
+                                    idx === currentStreamIndex
+                                      ? 'bg-amber-600 text-white font-bold'
+                                      : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                                  }`}
+                                >
+                                  {s.quality || 'Source'}
+                                </button>
+                              ))}
                       </div>
                     </div>
 

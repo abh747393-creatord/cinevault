@@ -90,7 +90,7 @@ export default function MovieBoxHubPage() {
     return displayedList.map((it) => {
       const rawId = it.id.value;
       const isSeries = it.media_type === 'series';
-      const ratingVal = metrics[rawId]?.rating || 8.0;
+      const ratingVal = metrics[rawId]?.rating ? Number(metrics[rawId].rating) : undefined;
       const yearVal = it.year ? parseInt(it.year, 10) || 2024 : 2024;
 
       return {
@@ -99,13 +99,12 @@ export default function MovieBoxHubPage() {
         title: it.title,
         slug: `mb-${rawId}`,
         contentType: isSeries ? 'tv' : 'movie',
-        posterUrl: it.poster_url || '',
-        backdropUrl: it.poster_url || '',
+        posterUrl: it.poster_url || '/images/neutral-poster.svg',
+        backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
         description: `${it.title} (${it.year || 'Feature'}) - CineVault High Definition Stream`,
         releaseDate: it.year ? `${it.year}-01-01` : '',
         year: yearVal,
         rating: ratingVal,
-        quality: '1080p',
         genres: [{ id: 'g-vip', name: 'CineVault VIP', slug: 'vip' }],
         language: 'English',
         status: 'released',

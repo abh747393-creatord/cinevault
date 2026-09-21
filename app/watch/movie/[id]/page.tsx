@@ -18,8 +18,8 @@ import { ContentRow } from '@/components/rows/content-row';
 import { ShareDialog } from '@/components/share/share-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { providerResolver } from '@/lib/providers/resolver';
+import { movieboxApi } from '@/lib/api/moviebox-client';
 import { StreamSource } from '@/types/providers';
 import { ContentItem } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
@@ -29,36 +29,58 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const timeParam = searchParams.get('t');
 
-  const [movie, setMovie] = useState<ContentItem | null>(() => {
-    return (
-      SEED_CONTENT.find(
-        (c) => (c.id === params.id || c.slug === params.id) && c.contentType === 'movie'
-      ) || null
-    );
-  });
-  const [loadingMovie, setLoadingMovie] = useState(!movie);
+  const [movie, setMovie] = useState<ContentItem | null>(null);
+  const [loadingMovie, setLoadingMovie] = useState(true);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [initialTime, setInitialTime] = useState<number>(0);
   const [inList, setInList] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [related, setRelated] = useState<ContentItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
-    if (!movie) {
-      setLoadingMovie(true);
-      providerResolver.resolveMovie(params.id).then((resolved) => {
-        if (isMounted) {
-          setMovie(resolved);
-          setLoadingMovie(false);
+    setLoadingMovie(true);
+
+    providerResolver.resolveMovie(params.id).then((resolved) => {
+      if (isMounted) {
+        setMovie(resolved);
+        setLoadingMovie(false);
+
+        if (resolved) {
+          movieboxApi.homepage('movie', 1).then((data) => {
+            if (!isMounted) return;
+            if (data?.items) {
+              const mapped: ContentItem[] = data.items
+                .filter((item) => item.id.value !== resolved.id.replace(/^mb-/, '') && item.title !== resolved.title)
+                .slice(0, 10)
+                .map((item) => ({
+                  id: `mb-${item.id.value}`,
+                  externalId: item.id.value,
+                  title: item.title,
+                  description: `${item.title} (${item.year || 'Feature Film'})`,
+                  contentType: 'movie',
+                  genres: [{ id: 'g-movie', name: 'Movie', slug: 'movie' }],
+                  releaseDate: item.year ? `${item.year}-01-01` : '',
+                  year: item.year ? parseInt(item.year, 10) || 2024 : 2024,
+                  posterUrl: item.poster_url || '/images/neutral-poster.svg',
+                  backdropUrl: item.poster_url || '/images/neutral-backdrop.svg',
+                  slug: `mb-${item.id.value}`,
+                  language: 'English',
+                  status: 'released',
+                }));
+              setRelated(mapped);
+            }
+          }).catch(() => {});
         }
-      }).catch(() => {
-        if (isMounted) setLoadingMovie(false);
-      });
-    }
+      }
+    }).catch(() => {
+      if (isMounted) setLoadingMovie(false);
+    });
+
     return () => {
       isMounted = false;
     };
-  }, [params.id, movie]);
+  }, [params.id]);
 
   useEffect(() => {
     if (!movie) return;
@@ -104,16 +126,12 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
     }
   };
 
-  const related = SEED_CONTENT.filter(
-    (c) => c.id !== movie.id && c.contentType === 'movie'
-  );
-
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 md:px-12 py-4 sm:py-6 space-y-6 sm:space-y-8 overflow-x-hidden">
       {/* Back button & Navigation */}
       <div className="flex items-center justify-between">
         <Link
-          href={`/movie/${movie.slug}`}
+          href={`/movie/${movie.slug || movie.id}`}
           className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
         >
           <IconArrowLeft className="w-4 h-4" />
@@ -170,7 +188,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
               className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/30 flex items-center gap-1.5 transition-all shadow-sm"
             >
               <span>🔴</span>
-              Watch on YouTube (Official 4K)
+              Watch on YouTube
               <IconArrowRightUp className="w-3.5 h-3.5 ml-0.5" />
             </a>
           )}
@@ -188,16 +206,9 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
             </a>
           )}
         </div>
-
-        {movie.year >= 2026 && (
-          <div className="text-xs text-amber-300/90 flex items-center gap-1.5 font-semibold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
-            <IconInfoCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-            <span>Theatrical Premiere: <strong>{movie.releaseDate || '2026'}</strong></span>
-          </div>
-        )}
       </div>
 
-      {streams.length > 0 ? (
+      {streams.length > 0 && (
         <div className="p-3.5 rounded-xl bg-gradient-to-r from-red-950/40 via-purple-950/30 to-card border border-red-500/20 text-xs text-slate-300 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
@@ -208,20 +219,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
             CINEVAULT VIP
           </span>
         </div>
-      ) : movie.year >= 2026 ? (
-        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-xs text-slate-300 flex items-start gap-3">
-          <IconInfoCircle className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-bold text-white text-sm flex items-center gap-1.5">
-              <IconInfoCircle className="w-4 h-4 text-primary inline" />
-              Theatrical Release Note
-            </p>
-            <p className="text-slate-300 leading-relaxed">
-              <strong>{movie.title}</strong> is an upcoming 2026 movie releasing globally in cinemas on <strong>{movie.releaseDate || '2026'}</strong>. Official 4K trailer and teaser preview are streaming in the player above.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      )}
 
       {/* Movie Information below player */}
       <div className="space-y-4 pt-4 border-t border-white/10">
@@ -229,26 +227,30 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-white">{movie.title}</h1>
             <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-              <Badge variant="rating" size="sm" className="flex items-center gap-1">
-                <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
-                {movie.rating}
-              </Badge>
-              <span>{movie.year}</span>
+              {movie.rating !== undefined && movie.rating > 0 && (
+                <Badge variant="rating" size="sm" className="flex items-center gap-1">
+                  <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
+                  {movie.rating.toFixed(1)}
+                </Badge>
+              )}
+              {movie.year && <span>{movie.year}</span>}
               {movie.runtime && <span>• {formatDuration(movie.runtime)}</span>}
-              {movie.quality && <span>• {movie.quality} Ultra HD</span>}
+              {movie.quality && <span>• {movie.quality}</span>}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {movie.genres.map((g) => (
-              <span
-                key={g.id}
-                className="px-2.5 py-1 rounded-lg bg-white/5 text-xs text-slate-300 border border-white/5"
-              >
-                {g.name}
-              </span>
-            ))}
-          </div>
+          {movie.genres && movie.genres.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {movie.genres.map((g) => (
+                <span
+                  key={g.id}
+                  className="px-2.5 py-1 rounded-lg bg-white/5 text-xs text-slate-300 border border-white/5"
+                >
+                  {g.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <p className="text-sm text-slate-300 max-w-4xl leading-relaxed">
@@ -264,12 +266,14 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
       </div>
 
       {/* Related Content */}
-      <div className="pt-8">
-        <ContentRow
-          title="Recommended Movies"
-          items={related}
-        />
-      </div>
+      {related.length > 0 && (
+        <div className="pt-8">
+          <ContentRow
+            title="Recommended Movies"
+            items={related}
+          />
+        </div>
+      )}
 
       <ShareDialog
         isOpen={showShare}

@@ -4,7 +4,6 @@ import { StreamSource, ProviderSearchResult, ProviderMetadata, StreamQuality, Au
 import { movieboxApi, MovieBoxMediaDetails, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 import { slugify } from '@/lib/utils';
 import { getEnrichedEpisode } from '@/lib/data/episode-metadata';
-import { SAMPLE_SUBTITLES } from '@/lib/data/catalog-seed';
 
 export class MovieBoxProvider implements ContentProvider {
   id = 'provider-sign-ultra-vip';
@@ -50,7 +49,8 @@ export class MovieBoxProvider implements ContentProvider {
     const uniqueId = `mb-${rawId}`;
     const isSeries = details.media_type === 'series' || details.seasons.length > 0;
     const yearNum = details.year ? parseInt(details.year, 10) || 0 : 0;
-    const ratingNum = details.imdb_rating ? parseFloat(details.imdb_rating) || 7.5 : 7.5;
+    const parsedRating = details.imdb_rating ? parseFloat(details.imdb_rating) : undefined;
+    const ratingNum = typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined;
 
     const genres: Genre[] = (details.genres || []).map((g) => ({
       id: slugify(g),
@@ -69,43 +69,20 @@ export class MovieBoxProvider implements ContentProvider {
         const enriched = getEnrichedEpisode(rawId, s.number, ep.number);
         const dynamicRuntime =
           enriched?.runtime ||
-          (details.duration ? parseInt(details.duration, 10) : undefined) ||
-          (44 + ((ep.number * 7 + s.number * 3) % 21));
+          (details.duration ? parseInt(details.duration, 10) : undefined);
         return {
           id: `s${s.number}e${ep.number}`,
           seasonId: `s-${s.number}`,
           episodeNumber: ep.number,
-          title: enriched?.title || ep.title || `Chapter ${ep.number}`,
+          title: enriched?.title || ep.title || `Episode ${ep.number}`,
           description:
             enriched?.description ||
             `Season ${s.number} Episode ${ep.number} of ${details.title}`,
           thumbnailUrl: details.poster_url || '',
-          runtime: dynamicRuntime,
+          runtime: dynamicRuntime || 45,
         };
       }),
     }));
-
-    if (isSeries && seasons.length === 0) {
-      seasons.push({
-        id: 's-1',
-        contentId: uniqueId,
-        seasonNumber: 1,
-        title: 'Season 1',
-        description: `Season 1 of ${details.title}`,
-        posterUrl: details.poster_url,
-        episodes: [
-          {
-            id: 's1e1',
-            seasonId: 's-1',
-            episodeNumber: 1,
-            title: 'Episode 1',
-            description: `Episode 1 of ${details.title}`,
-            thumbnailUrl: details.poster_url || '',
-            runtime: details.duration ? parseInt(details.duration, 10) || 45 : 45,
-          },
-        ],
-      });
-    }
 
     return {
       id: uniqueId,
@@ -125,7 +102,6 @@ export class MovieBoxProvider implements ContentProvider {
       genres,
       director: details.director,
       cast: details.stars ? details.stars.split(',').map((s) => s.trim()) : [],
-      quality: '1080p',
       dubs: details.dubs || [],
       availableAudio: details.dubs && details.dubs.length > 0
         ? details.dubs.map((d) => d.label || d.language)

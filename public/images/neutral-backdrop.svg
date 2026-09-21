@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="100%" height="100%">
+  <defs>
+    <linearGradient id="backdropGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="50%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#000000" />
+    </linearGradient>
+    <radialGradient id="radialGlow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#backdropGrad)"/>
+  <rect width="100%" height="100%" fill="url(#radialGlow)"/>
+  <g transform="translate(760, 390)" fill="#1e293b">
+    <path d="M72 10H8c-4.4 0-8 3.6-8 8v44c0 4.4 3.6 8 8 8h64c4.4 0 8-3.6 8-8V18c0-4.4-3.6-8-8-8zm-4 44H12V26h56v28z"/>
+    <polygon points="32,32 32,48 48,40" fill="#334155"/>
+  </g>
+  <text x="50%" y="490" fill="#334155" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" text-anchor="middle" letter-spacing="2">CINEVAULT CINEMA</text>
+</svg>

@@ -3,100 +3,112 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { IconPlay, IconPlus, IconCheck, IconStar, IconBolt, IconStars } from '@/components/ui/icons';
+import { IconPlay, IconPlus, IconCheck, IconStar, IconBolt, IconStars, IconMoonStars } from '@/components/ui/icons';
 import { HeroBanner } from '@/components/hero/hero-banner';
 import { ContentRow } from '@/components/rows/content-row';
 import { ContinueWatchingRow } from '@/components/rows/continue-watching-row';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { ContentItem } from '@/types/content';
 import { formatDuration } from '@/lib/utils';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storage/local-storage-store';
-import { movieboxApi } from '@/lib/api/moviebox-client';
+import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 
 // Client-side module-level cache to ensure instant zero-latency Home navigation
-let cachedLiveItems: ContentItem[] | null = null;
+let cachedAll: ContentItem[] | null = null;
+let cachedMovies: ContentItem[] | null = null;
+let cachedTv: ContentItem[] | null = null;
+let cachedMidnight: ContentItem[] | null = null;
 
 export default function HomePage() {
   const [infoModalContent, setInfoModalContent] = useState<ContentItem | null>(null);
   const [inList, setInList] = useState(false);
-  const [liveItems, setLiveItems] = useState<ContentItem[]>(() => cachedLiveItems || []);
+  const [allContent, setAllContent] = useState<ContentItem[]>(() => cachedAll || []);
+  const [moviesList, setMoviesList] = useState<ContentItem[]>(() => cachedMovies || []);
+  const [tvList, setTvList] = useState<ContentItem[]>(() => cachedTv || []);
+  const [midnightList, setMidnightList] = useState<ContentItem[]>(() => cachedMidnight || []);
+  const [loading, setLoading] = useState(() => !cachedAll);
 
   useEffect(() => {
     let isMounted = true;
-    movieboxApi.homepage('all', 1).then((data) => {
+
+    const mapCatalogItem = (it: MovieBoxCatalogItem, metrics?: Record<string, any>): ContentItem => {
+      const rawId = it.id.value;
+      const isSeries = it.media_type === 'series' || (it.season_count !== undefined && it.season_count > 0);
+      const metricRating = metrics?.[rawId]?.rating;
+      const parsedRating = metricRating ? parseFloat(metricRating) : undefined;
+
+      return {
+        id: `mb-${rawId}`,
+        externalId: rawId,
+        title: it.title,
+        slug: `mb-${rawId}`,
+        contentType: isSeries ? 'tv' : 'movie',
+        posterUrl: it.poster_url || '/images/neutral-poster.svg',
+        backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+        description: `${it.title} (${it.year || 'Latest Release'})`,
+        releaseDate: it.year ? `${it.year}-01-01` : '',
+        year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+        rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+        featured: false,
+        genres: [],
+        language: 'English',
+        status: isSeries ? 'ongoing' : 'released',
+      };
+    };
+
+    Promise.allSettled([
+      movieboxApi.homepage('all', 1),
+      movieboxApi.homepage('movie', 1),
+      movieboxApi.homepage('tv', 1),
+      movieboxApi.homepage('9', 1),
+    ]).then(([allRes, movieRes, tvRes, midnightRes]) => {
       if (!isMounted) return;
-      if (data && data.items && data.items.length > 0) {
-        const mapped: ContentItem[] = data.items.map((it) => ({
-          id: `mb-${it.id.value}`,
-          externalId: it.id.value,
-          title: it.title,
-          slug: `mb-${it.id.value}`,
-          contentType: it.media_type === 'series' ? 'tv' : 'movie',
-          posterUrl: it.poster_url || '',
-          backdropUrl: it.poster_url || '',
-          description: `${it.title} (${it.year || 'Latest'})`,
-          releaseDate: it.year ? `${it.year}-01-01` : '',
-          year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-          rating: data.metrics?.[it.id.value]?.rating || 8.0,
-          featured: false,
-          genres: [],
-          language: 'English',
-          status: 'released',
-        }));
-        cachedLiveItems = mapped;
-        setLiveItems(mapped);
+
+      if (allRes.status === 'fulfilled' && allRes.value?.items) {
+        const mapped = allRes.value.items.map((it) => mapCatalogItem(it, allRes.value.metrics));
+        cachedAll = mapped;
+        setAllContent(mapped);
       }
-    }).catch(() => {});
+
+      if (movieRes.status === 'fulfilled' && movieRes.value?.items) {
+        const mapped = movieRes.value.items
+          .filter((it) => it.media_type !== 'series')
+          .map((it) => mapCatalogItem(it, movieRes.value.metrics));
+        cachedMovies = mapped;
+        setMoviesList(mapped);
+      }
+
+      if (tvRes.status === 'fulfilled' && tvRes.value?.items) {
+        const mapped = tvRes.value.items
+          .filter((it) => it.media_type === 'series' || (it.season_count ?? 0) > 0)
+          .map((it) => mapCatalogItem(it, tvRes.value.metrics));
+        cachedTv = mapped;
+        setTvList(mapped);
+      }
+
+      if (midnightRes.status === 'fulfilled' && midnightRes.value?.items) {
+        const mapped = midnightRes.value.items.map((it) => mapCatalogItem(it, midnightRes.value.metrics));
+        cachedMidnight = mapped;
+        setMidnightList(mapped);
+      }
+
+      setLoading(false);
+    });
+
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const featuredItems = useMemo(() => {
-    const seedFeatured = SEED_CONTENT.filter((item) => item.featured);
-    if (liveItems.length > 0) {
-      const liveFeatured = liveItems.slice(0, 5).map((item) => ({ ...item, featured: true }));
-      return [...liveFeatured, ...seedFeatured];
-    }
-    return seedFeatured;
-  }, [liveItems]);
+  const featuredHeroItems = useMemo(() => {
+    return allContent.slice(0, 5).map((item) => ({ ...item, featured: true }));
+  }, [allContent]);
 
   const trendingItems = useMemo(() => {
-    if (liveItems.length > 0) {
-      return [...liveItems, ...SEED_CONTENT];
-    }
-    return [...SEED_CONTENT].sort((a, b) => b.rating - a.rating);
-  }, [liveItems]);
-
-  const movieboxFeatured = useMemo(() => {
-    const seedMb = SEED_CONTENT.filter((c) => c.id.startsWith('mb-'));
-    if (liveItems.length > 0) {
-      return [...seedMb, ...liveItems];
-    }
-    return seedMb;
-  }, [liveItems]);
-
-  const latestMovies = useMemo(() => {
-    const liveMovies = liveItems.filter((i) => i.contentType === 'movie');
-    const seedMovies = SEED_CONTENT.filter((item) => item.contentType === 'movie');
-    return liveMovies.length > 0 ? [...liveMovies, ...seedMovies] : seedMovies;
-  }, [liveItems]);
-
-  const latestTvShows = useMemo(() => {
-    const liveTv = liveItems.filter((i) => i.contentType === 'tv');
-    const seedTv = SEED_CONTENT.filter((item) => item.contentType === 'tv');
-    return liveTv.length > 0 ? [...liveTv, ...seedTv] : seedTv;
-  }, [liveItems]);
-
-  const popularAnime = SEED_CONTENT.filter((item) => item.contentType === 'anime');
-  const actionItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'action'));
-  const scifiItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'sci-fi'));
-  const animationItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'animation'));
-  const dramaItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'drama'));
-  const comedyItems = SEED_CONTENT.filter((item) => item.genres.some((g) => g.slug === 'comedy'));
+    return allContent;
+  }, [allContent]);
 
   const handleOpenInfo = (content: ContentItem) => {
     setInfoModalContent(content);
@@ -117,14 +129,16 @@ export default function HomePage() {
   return (
     <div className="w-full space-y-6 md:space-y-10">
       {/* Cinematic Rotating Hero Banner */}
-      <HeroBanner
-        featuredItems={featuredItems}
-        onOpenInfo={handleOpenInfo}
-      />
+      {featuredHeroItems.length > 0 && (
+        <HeroBanner
+          featuredItems={featuredHeroItems}
+          onOpenInfo={handleOpenInfo}
+        />
+      )}
 
       {/* Content Rows Container */}
       <div className="space-y-6 md:space-y-8 -mt-6 sm:-mt-10 relative z-20">
-        {/* Continue Watching Row (Only when items exist) */}
+        {/* Continue Watching Row (Only when real user items exist) */}
         <ContinueWatchingRow />
 
         {/* CineVault VIP Quick Access Banner */}
@@ -142,7 +156,7 @@ export default function HomePage() {
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Stream 1080p, 4K, and Multi-Res releases directly from high-speed CDN mirrors with multi-language dubs.
+                Stream genuine provider releases with multi-resolution DASH and authentic multi-track audio.
               </p>
             </div>
           </div>
@@ -154,85 +168,45 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* CineVault VIP Featured Streams */}
-        <ContentRow
-          title="⚡ CineVault VIP Catalog"
-          items={movieboxFeatured}
-          exploreHref="/moviebox"
-          onOpenInfo={handleOpenInfo}
-        />
-
         {/* Trending Now */}
-        <ContentRow
-          title="Trending Now"
-          items={trendingItems}
-          exploreHref="/trending"
-          onOpenInfo={handleOpenInfo}
-        />
+        {trendingItems.length > 0 && (
+          <ContentRow
+            title="Trending Now"
+            items={trendingItems}
+            exploreHref="/trending"
+            onOpenInfo={handleOpenInfo}
+          />
+        )}
 
         {/* Latest Movies */}
-        <ContentRow
-          title="Latest Movies"
-          items={latestMovies}
-          exploreHref="/movies"
-          onOpenInfo={handleOpenInfo}
-        />
+        {moviesList.length > 0 && (
+          <ContentRow
+            title="Latest Movies"
+            items={moviesList}
+            exploreHref="/movies"
+            onOpenInfo={handleOpenInfo}
+          />
+        )}
 
         {/* Latest TV Shows */}
-        <ContentRow
-          title="Latest TV Shows"
-          items={latestTvShows}
-          exploreHref="/tv"
-          onOpenInfo={handleOpenInfo}
-        />
+        {tvList.length > 0 && (
+          <ContentRow
+            title="TV Shows & Series"
+            items={tvList}
+            exploreHref="/tv"
+            onOpenInfo={handleOpenInfo}
+          />
+        )}
 
-        {/* Popular Anime */}
-        <ContentRow
-          title="Popular Anime"
-          items={popularAnime}
-          exploreHref="/anime"
-          onOpenInfo={handleOpenInfo}
-        />
-
-        {/* Sci-Fi Adventures */}
-        <ContentRow
-          title="Sci-Fi & Cyberpunk"
-          items={scifiItems}
-          exploreHref="/movies?genre=sci-fi"
-          onOpenInfo={handleOpenInfo}
-        />
-
-        {/* Action Packed */}
-        <ContentRow
-          title="High-Octane Action"
-          items={actionItems}
-          exploreHref="/movies?genre=action"
-          onOpenInfo={handleOpenInfo}
-        />
-
-        {/* Animation & Fantasy */}
-        <ContentRow
-          title="World of Animation"
-          items={animationItems}
-          exploreHref="/movies?genre=animation"
-          onOpenInfo={handleOpenInfo}
-        />
-
-        {/* Drama & Suspense */}
-        <ContentRow
-          title="Drama & Mystery"
-          items={dramaItems}
-          exploreHref="/movies?genre=drama"
-          onOpenInfo={handleOpenInfo}
-        />
-
-        {/* Comedy */}
-        <ContentRow
-          title="Comedy & Lighthearted"
-          items={comedyItems}
-          exploreHref="/movies?genre=comedy"
-          onOpenInfo={handleOpenInfo}
-        />
+        {/* Midnight Section */}
+        {midnightList.length > 0 && (
+          <ContentRow
+            title="🌙 Midnight Specials"
+            items={midnightList}
+            exploreHref="/midnight"
+            onOpenInfo={handleOpenInfo}
+          />
+        )}
       </div>
 
       {/* Quick More Info Modal */}
@@ -257,10 +231,12 @@ export default function HomePage() {
                   {infoModalContent.title}
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-slate-300 mt-1">
-                  <Badge variant="rating" size="sm" className="flex items-center gap-1">
-                    <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
-                    {infoModalContent.rating}
-                  </Badge>
+                  {infoModalContent.rating !== undefined && infoModalContent.rating > 0 && (
+                    <Badge variant="rating" size="sm" className="flex items-center gap-1">
+                      <IconStar className="w-2.5 h-2.5 text-amber-300" variant="Bold" />
+                      {infoModalContent.rating.toFixed(1)}
+                    </Badge>
+                  )}
                   <span>{infoModalContent.year}</span>
                   {infoModalContent.runtime && (
                     <span>• {formatDuration(infoModalContent.runtime)}</span>
@@ -274,7 +250,7 @@ export default function HomePage() {
                   href={
                     infoModalContent.contentType === 'movie'
                       ? `/watch/movie/${infoModalContent.id}`
-                      : `/watch/tv/${infoModalContent.id}/ep-oc-101`
+                      : `/tv/${infoModalContent.slug}`
                   }
                 >
                   <Button variant="primary" size="sm" className="flex items-center gap-1.5">
@@ -300,26 +276,6 @@ export default function HomePage() {
             <p className="text-sm text-slate-300 leading-relaxed">
               {infoModalContent.description}
             </p>
-
-            <div className="grid grid-cols-2 gap-4 text-xs pt-2 border-t border-white/10">
-              <div>
-                <span className="text-slate-400 block mb-1 font-semibold">Genres</span>
-                <div className="flex flex-wrap gap-1">
-                  {infoModalContent.genres.map((g) => (
-                    <span key={g.id} className="bg-white/10 px-2 py-0.5 rounded text-slate-200">
-                      {g.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {infoModalContent.cast && infoModalContent.cast.length > 0 && (
-                <div>
-                  <span className="text-slate-400 block mb-1 font-semibold">Starring Cast</span>
-                  <p className="text-slate-200">{infoModalContent.cast.join(', ')}</p>
-                </div>
-              )}
-            </div>
 
             <div className="pt-3 flex justify-end">
               <Link

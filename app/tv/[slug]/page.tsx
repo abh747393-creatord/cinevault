@@ -11,8 +11,8 @@ import {
   IconStar,
   IconAlertCircle,
 } from '@/components/ui/icons';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { providerResolver } from '@/lib/providers/resolver';
+import { movieboxApi } from '@/lib/api/moviebox-client';
 import { ContentItem } from '@/types/content';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,26 +22,13 @@ import { ShareDialog } from '@/components/share/share-dialog';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '@/lib/storage/local-storage-store';
 
 export default function TvDetailsPage({ params }: { params: { slug: string } }) {
-  const [show, setShow] = useState<ContentItem | null>(() => {
-    const cleanId = params.slug.replace(/^mb-/, '');
-    return (
-      SEED_CONTENT.find((c) => {
-        const cCleanId = c.id.replace(/^mb-/, '');
-        const cExtId = c.externalId?.replace(/^mb-/, '');
-        return (
-          c.slug === params.slug ||
-          c.id === params.slug ||
-          cCleanId === cleanId ||
-          (cExtId && cExtId === cleanId)
-        ) && (c.contentType === 'tv' || c.contentType === 'anime');
-      }) || null
-    );
-  });
-  const [loading, setLoading] = useState(!show);
+  const [show, setShow] = useState<ContentItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [inList, setInList] = useState(() => (show ? isInWatchlist(show.id) : false));
+  const [inList, setInList] = useState(false);
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(1);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [relatedShows, setRelatedShows] = useState<ContentItem[]>([]);
 
   const loadTvShow = useCallback(async () => {
     setLoading(true);
@@ -61,6 +48,31 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
         setShow(resolved);
         setInList(isInWatchlist(resolved.id));
         setError(null);
+
+        // Fetch real related TV shows
+        movieboxApi.homepage('tv', 1).then((data) => {
+          if (data?.items) {
+            const mapped: ContentItem[] = data.items
+              .filter((item) => item.id.value !== resolved.id.replace(/^mb-/, '') && item.title !== resolved.title)
+              .slice(0, 10)
+              .map((item) => ({
+                id: `mb-${item.id.value}`,
+                externalId: item.id.value,
+                title: item.title,
+                description: `${item.title} (${item.year || 'TV Series'})`,
+                contentType: 'tv',
+                genres: [{ id: 'g-tv', name: 'TV Series', slug: 'tv' }],
+                releaseDate: item.year ? `${item.year}-01-01` : '',
+                year: item.year ? parseInt(item.year, 10) || 2024 : 2024,
+                posterUrl: item.poster_url || '/images/neutral-poster.svg',
+                backdropUrl: item.poster_url || '/images/neutral-backdrop.svg',
+                slug: `mb-${item.id.value}`,
+                language: 'English',
+                status: 'released',
+              }));
+            setRelatedShows(mapped);
+          }
+        }).catch(() => {});
       } else {
         setError('TV show details unavailable.');
       }
@@ -77,10 +89,8 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
   }, [params.slug]);
 
   useEffect(() => {
-    if (!show) {
-      loadTvShow();
-    }
-  }, [loadTvShow, show]);
+    loadTvShow();
+  }, [loadTvShow]);
 
   if (loading) {
     return (
@@ -138,12 +148,8 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
   const currentSeason = seasons.find((s) => s.seasonNumber === selectedSeasonNumber) || seasons[0];
   const firstEpisodeId = currentSeason?.episodes?.[0]?.id || 'ep-1';
 
-  const relatedShows = SEED_CONTENT.filter(
-    (c) => c.id !== show.id && (c.contentType === 'tv' || c.contentType === 'anime')
-  );
-
-  const fallbackBackdrop = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80';
-  const fallbackPoster = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80';
+  const fallbackBackdrop = '/images/neutral-backdrop.svg';
+  const fallbackPoster = '/images/neutral-poster.svg';
 
   return (
     <div className="min-h-screen pb-16 space-y-10">
@@ -186,13 +192,15 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
               <Badge variant={show.contentType === 'anime' ? 'accent' : 'primary'} size="sm">
                 {show.contentType === 'anime' ? 'Anime Series' : 'TV Series'}
               </Badge>
-              <Badge variant="rating" size="sm" className="flex items-center gap-1">
-                <IconStar className="w-3 h-3 text-amber-300" variant="Bold" />
-                {show.rating}
-              </Badge>
+              {show.rating !== undefined && show.rating > 0 && (
+                <Badge variant="rating" size="sm" className="flex items-center gap-1">
+                  <IconStar className="w-3 h-3 text-amber-300" variant="Bold" />
+                  {show.rating.toFixed(1)}
+                </Badge>
+              )}
               {show.quality && <Badge variant="quality" size="sm">{show.quality}</Badge>}
               <span className="text-xs text-slate-400 font-medium">
-                {show.year} • {seasons.length} Season{seasons.length > 1 ? 's' : ''}
+                {show.year ? `${show.year} • ` : ''}{seasons.length} Season{seasons.length > 1 ? 's' : ''}
               </span>
             </div>
 
@@ -205,16 +213,18 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5">
-              {show.genres.map((g) => (
-                <span
-                  key={g.id}
-                  className="px-3 py-1 rounded-full bg-white/10 text-xs text-slate-200 border border-white/5"
-                >
-                  {g.name}
-                </span>
-              ))}
-            </div>
+            {show.genres && show.genres.length > 0 && (
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-1.5">
+                {show.genres.map((g) => (
+                  <span
+                    key={g.id}
+                    className="px-3 py-1 rounded-full bg-white/10 text-xs text-slate-200 border border-white/5"
+                  >
+                    {g.name}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-3xl">
               {show.description}
@@ -303,12 +313,14 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
       </div>
 
       {/* More Like This */}
-      <div className="pt-8">
-        <ContentRow
-          title="Similar Series & Shows"
-          items={relatedShows}
-        />
-      </div>
+      {relatedShows.length > 0 && (
+        <div className="pt-8">
+          <ContentRow
+            title="Similar Series & Shows"
+            items={relatedShows}
+          />
+        </div>
+      )}
 
       <ShareDialog
         isOpen={showShareDialog}

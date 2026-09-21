@@ -2,7 +2,6 @@
 
 import { ContentItem } from '@/types/content';
 import { UserProfile, WatchHistoryItem, WatchlistItem } from '@/types/user';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 
 const STORAGE_KEYS = {
   USER: 'cinevault_user_profile',
@@ -18,7 +17,7 @@ export const DEFAULT_USER: UserProfile = {
   email: 'viewer@cinevault.local',
   username: 'cinephile',
   displayName: 'Alex Cinema',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+  avatarUrl: '/images/neutral-poster.svg',
   role: 'admin', // defaulted to admin in demo mode so full admin features can be tested
   preferredLanguage: 'English',
   preferredSubtitleLanguage: 'English',
@@ -27,9 +26,9 @@ export const DEFAULT_USER: UserProfile = {
   theme: 'dark',
   createdAt: '2024-01-01T00:00:00.000Z',
   stats: {
-    hoursWatched: 24,
-    completedTitles: 18,
-    watchlistCount: 5,
+    hoursWatched: 0,
+    completedTitles: 0,
+    watchlistCount: 0,
   },
 };
 
@@ -61,25 +60,7 @@ export function getStoredWatchlist(): WatchlistItem[] {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.WATCHLIST);
     if (!data) {
-      // Seed default watchlist with 2 titles
-      const initial: WatchlistItem[] = [
-        {
-          id: 'wl-1',
-          userId: DEFAULT_USER.id,
-          contentId: SEED_CONTENT[0].id,
-          content: SEED_CONTENT[0],
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'wl-2',
-          userId: DEFAULT_USER.id,
-          contentId: SEED_CONTENT[1].id,
-          content: SEED_CONTENT[1],
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(initial));
-      return initial;
+      return [];
     }
     return JSON.parse(data);
   } catch {
@@ -122,21 +103,7 @@ export function getStoredHistory(): WatchHistoryItem[] {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.WATCH_HISTORY);
     if (!data) {
-      // Seed an initial continue watching item so the row is immediately testable
-      const initial: WatchHistoryItem[] = [
-        {
-          id: 'hist-seed-1',
-          userId: DEFAULT_USER.id,
-          contentId: SEED_CONTENT[0].id,
-          content: SEED_CONTENT[0],
-          positionSeconds: 240,
-          durationSeconds: 720,
-          completed: false,
-          lastWatchedAt: new Date(Date.now() - 3600 * 1000).toISOString(),
-        },
-      ];
-      localStorage.setItem(STORAGE_KEYS.WATCH_HISTORY, JSON.stringify(initial));
-      return initial;
+      return [];
     }
     return JSON.parse(data);
   } catch {

@@ -2,7 +2,6 @@ import { ContentProvider } from './provider-interface';
 import { ContentItem, Episode } from '@/types/content';
 import { StreamSource, ProviderSearchResult, ProviderMetadata } from '@/types/providers';
 import { getBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 
 export class LocalDbProvider implements ContentProvider {
   id = 'provider-local-db';
@@ -26,18 +25,7 @@ export class LocalDbProvider implements ContentProvider {
 
   async search(query: string): Promise<ProviderSearchResult[]> {
     if (!isSupabaseConfigured) {
-      const q = query.toLowerCase();
-      return SEED_CONTENT
-        .filter((c) => c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
-        .map((c) => ({
-          id: c.id,
-          providerId: this.id,
-          title: c.title,
-          year: c.year,
-          contentType: c.contentType,
-          posterUrl: c.posterUrl,
-          overview: c.description,
-        }));
+      return [];
     }
 
     try {
@@ -66,7 +54,7 @@ export class LocalDbProvider implements ContentProvider {
 
   async getMovie(idOrSlug: string): Promise<ContentItem | null> {
     if (!isSupabaseConfigured) {
-      return SEED_CONTENT.find((c) => (c.id === idOrSlug || c.slug === idOrSlug) && c.contentType === 'movie') || null;
+      return null;
     }
 
     try {
@@ -85,7 +73,7 @@ export class LocalDbProvider implements ContentProvider {
 
   async getTvShow(idOrSlug: string): Promise<ContentItem | null> {
     if (!isSupabaseConfigured) {
-      return SEED_CONTENT.find((c) => (c.id === idOrSlug || c.slug === idOrSlug) && (c.contentType === 'tv' || c.contentType === 'anime')) || null;
+      return null;
     }
 
     try {
@@ -107,9 +95,7 @@ export class LocalDbProvider implements ContentProvider {
 
   async getEpisodes(contentId: string, seasonNumber: number = 1): Promise<Episode[]> {
     if (!isSupabaseConfigured) {
-      const show = SEED_CONTENT.find((c) => c.id === contentId || c.slug === contentId);
-      const season = show?.seasons?.find((s) => s.seasonNumber === seasonNumber);
-      return season?.episodes || [];
+      return [];
     }
 
     try {

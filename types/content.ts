@@ -57,7 +57,7 @@ export interface ContentItem {
   releaseDate: string;
   year: number;
   runtime?: number; // minutes for movies
-  rating: number; // e.g. 8.4
+  rating?: number; // e.g. 8.4
   ageRating?: string; // e.g. 'PG-13', 'TV-MA'
   language: string;
   country?: string;

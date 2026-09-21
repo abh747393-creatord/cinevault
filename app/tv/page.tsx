@@ -6,7 +6,7 @@ import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
-import { SEED_CONTENT, SEED_GENRES } from '@/lib/data/catalog-seed';
+import { GENRES } from '@/lib/constants/genres';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
 
 let cachedLiveTv: ContentItem[] | null = null;
@@ -19,37 +19,46 @@ export default function TvShowsPage() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [liveTv, setLiveTv] = useState<ContentItem[]>(() => cachedLiveTv || []);
+  const [loading, setLoading] = useState(() => !cachedLiveTv);
 
   useEffect(() => {
     let isMounted = true;
     if (cachedLiveTv && cachedLiveTv.length > 0) return;
 
+    setLoading(true);
     import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
       movieboxApi.homepage('tv', 1).then((data) => {
         if (!isMounted) return;
         if (data && data.items && data.items.length > 0) {
           const mapped: ContentItem[] = data.items
             .filter((it) => it.media_type === 'series' || ((it.season_count ?? 0) > 0))
-            .map((it) => ({
-            id: `mb-${it.id.value}`,
-            externalId: it.id.value,
-            title: it.title,
-            slug: `mb-${it.id.value}`,
-            contentType: 'tv',
-            posterUrl: it.poster_url || '',
-            backdropUrl: it.poster_url || '',
-            description: `${it.title} (${it.year || 'Television Series'})`,
-            releaseDate: it.year ? `${it.year}-01-01` : '',
-            year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-            rating: data.metrics?.[it.id.value]?.rating || 8.0,
-            genres: [],
-            language: 'English',
-            status: 'ongoing',
-          }));
+            .map((it) => {
+              const metricRating = data.metrics?.[it.id.value]?.rating;
+              const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+              return {
+                id: `mb-${it.id.value}`,
+                externalId: it.id.value,
+                title: it.title,
+                slug: `mb-${it.id.value}`,
+                contentType: 'tv',
+                posterUrl: it.poster_url || '/images/neutral-poster.svg',
+                backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+                description: `${it.title} (${it.year || 'Television Series'})`,
+                releaseDate: it.year ? `${it.year}-01-01` : '',
+                year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+                rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+                genres: [],
+                language: 'English',
+                status: 'ongoing',
+              };
+            });
           cachedLiveTv = mapped;
           setLiveTv(mapped);
         }
-      }).catch(() => {});
+        setLoading(false);
+      }).catch(() => {
+        if (isMounted) setLoading(false);
+      });
     });
     return () => {
       isMounted = false;
@@ -57,8 +66,7 @@ export default function TvShowsPage() {
   }, []);
 
   const filteredTv = useMemo(() => {
-    const seedList = SEED_CONTENT.filter((c) => c.contentType === 'tv');
-    let list = liveTv.length > 0 ? [...liveTv, ...seedList] : seedList;
+    let list: ContentItem[] = [...liveTv];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -77,11 +85,11 @@ export default function TvShowsPage() {
     if (filters.sortBy === 'latest') {
       list.sort((a, b) => b.year - a.year);
     } else if (filters.sortBy === 'rating') {
-      list.sort((a, b) => b.rating - a.rating);
+      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (filters.sortBy === 'alphabetical') {
       list.sort((a, b) => a.title.localeCompare(b.title));
     } else {
-      list.sort((a, b) => b.rating - a.rating);
+      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     }
 
     return list;
@@ -117,15 +125,18 @@ export default function TvShowsPage() {
         </div>
       </div>
 
+      {/* Main Layout: Sidebar on Desktop, Grid on Right */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-start">
+        {/* Desktop Sidebar Filter Panel */}
         <div className="hidden md:block col-span-1 sticky top-24">
           <FilterPanel
-            genres={SEED_GENRES}
+            genres={GENRES}
             filters={filters}
             onChange={setFilters}
           />
         </div>
 
+        {/* Mobile Filter Drawer */}
         {showMobileFilters && (
           <div className="md:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md p-4 flex flex-col justify-end animate-fade-in">
             <div className="bg-card border border-white/10 rounded-2xl p-4 max-h-[80vh] overflow-y-auto space-y-4">
@@ -140,7 +151,7 @@ export default function TvShowsPage() {
                 </Button>
               </div>
               <FilterPanel
-                genres={SEED_GENRES}
+                genres={GENRES}
                 filters={filters}
                 onChange={(f) => {
                   setFilters(f);
@@ -151,8 +162,14 @@ export default function TvShowsPage() {
           </div>
         )}
 
+        {/* TV Shows Grid */}
         <div className="col-span-1 md:col-span-3">
-          {filteredTv.length > 0 ? (
+          {loading && liveTv.length === 0 ? (
+            <div className="py-24 flex flex-col items-center justify-center space-y-3">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-400 text-xs font-medium">Loading genuine television catalog...</p>
+            </div>
+          ) : filteredTv.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {filteredTv.map((show) => (
                 <ContentCard
@@ -165,10 +182,20 @@ export default function TvShowsPage() {
           ) : (
             <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
               <IconTV className="w-12 h-12 text-slate-500 mx-auto" />
-              <h3 className="text-base font-bold text-white">No TV shows found</h3>
+              <h3 className="text-base font-bold text-white">No TV shows match your filters</h3>
               <p className="text-xs text-slate-400">
-                Try adjusting your search criteria.
+                Try resetting your genre or search criteria to discover more titles.
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFilters({ contentType: 'tv', sortBy: 'popular' });
+                  setSearchQuery('');
+                }}
+              >
+                Reset Filters
+              </Button>
             </div>
           )}
         </div>

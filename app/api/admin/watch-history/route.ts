@@ -3,7 +3,6 @@ import { verifyAdminRequest } from '@/lib/auth/admin-guard';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { getServerClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 
 export const dynamic = 'force-dynamic';
 

@@ -3,7 +3,6 @@ import { verifyAdminRequest } from '@/lib/auth/admin-guard';
 import { getServerClient } from '@/lib/supabase/server';
 import { getAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { FRANCHISE_COLLECTIONS } from '@/lib/data/collections-data';
 import { providerResolver } from '@/lib/providers/resolver';
 
@@ -21,10 +20,10 @@ export async function GET(request: NextRequest) {
   try {
     let totalUsers = 1; // At least the administrator
     let activeUsers = 1;
-    let totalContent = SEED_CONTENT.length;
-    let moviesCount = SEED_CONTENT.filter((c) => c.contentType === 'movie').length;
-    let tvCount = SEED_CONTENT.filter((c) => c.contentType === 'tv').length;
-    let animeCount = SEED_CONTENT.filter((c) => c.contentType === 'anime').length;
+    let totalContent = 0;
+    let moviesCount = 0;
+    let tvCount = 0;
+    let animeCount = 0;
     let totalWatchSessions = 0;
     let totalWatchMinutes = 0;
     let recentSessions: any[] = [];

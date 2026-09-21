@@ -24,8 +24,8 @@ import { ContentRow } from '@/components/rows/content-row';
 import { ShareDialog } from '@/components/share/share-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SEED_CONTENT } from '@/lib/data/catalog-seed';
 import { providerResolver } from '@/lib/providers/resolver';
+import { movieboxApi } from '@/lib/api/moviebox-client';
 import { StreamSource } from '@/types/providers';
 import { Episode, Season, ContentItem } from '@/types/content';
 import {
@@ -44,30 +44,15 @@ function WatchTvContent({
   const searchParams = useSearchParams();
   const timeParam = searchParams.get('t');
 
-  const [show, setShow] = useState<ContentItem | null>(() => {
-    const cleanId = params.id.replace(/^mb-/, '');
-    return (
-      SEED_CONTENT.find((c) => {
-        const cCleanId = c.id.replace(/^mb-/, '');
-        const cExtId = c.externalId?.replace(/^mb-/, '');
-        return (
-          c.id === params.id ||
-          c.slug === params.id ||
-          cCleanId === cleanId ||
-          (cExtId && cExtId === cleanId)
-        ) && (c.contentType === 'tv' || c.contentType === 'anime');
-      }) || null
-    );
-  });
-  const [loadingShow, setLoadingShow] = useState(!show);
+  const [show, setShow] = useState<ContentItem | null>(null);
+  const [loadingShow, setLoadingShow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [initialTime, setInitialTime] = useState<number>(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [showShare, setShowShare] = useState<boolean>(false);
-  const [inList, setInList] = useState<boolean>(() =>
-    show ? isInWatchlist(show.id) : false
-  );
+  const [inList, setInList] = useState<boolean>(false);
+  const [relatedShows, setRelatedShows] = useState<ContentItem[]>([]);
 
   const loadTvShow = useCallback(async () => {
     setLoadingShow(true);
@@ -86,6 +71,31 @@ function WatchTvContent({
       if (resolved) {
         setShow(resolved);
         setError(null);
+
+        // Fetch real related shows
+        movieboxApi.homepage('tv', 1).then((data) => {
+          if (data?.items) {
+            const mapped: ContentItem[] = data.items
+              .filter((item) => item.id.value !== resolved.id.replace(/^mb-/, '') && item.title !== resolved.title)
+              .slice(0, 10)
+              .map((item) => ({
+                id: `mb-${item.id.value}`,
+                externalId: item.id.value,
+                title: item.title,
+                description: `${item.title} (${item.year || 'TV Series'})`,
+                contentType: 'tv',
+                genres: [{ id: 'g-tv', name: 'TV Series', slug: 'tv' }],
+                releaseDate: item.year ? `${item.year}-01-01` : '',
+                year: item.year ? parseInt(item.year, 10) || 2024 : 2024,
+                posterUrl: item.poster_url || '/images/neutral-poster.svg',
+                backdropUrl: item.poster_url || '/images/neutral-backdrop.svg',
+                slug: `mb-${item.id.value}`,
+                language: 'English',
+                status: 'released',
+              }));
+            setRelatedShows(mapped);
+          }
+        }).catch(() => {});
       } else {
         setError('TV show details unavailable.');
       }
@@ -102,10 +112,8 @@ function WatchTvContent({
   }, [params.id]);
 
   useEffect(() => {
-    if (!show) {
-      loadTvShow();
-    }
-  }, [loadTvShow, show]);
+    loadTvShow();
+  }, [loadTvShow]);
 
   let currentEpisode: Episode | undefined = undefined;
   let currentSeason: Season | undefined = undefined;
@@ -270,12 +278,7 @@ function WatchTvContent({
 
   const seasonEpisodes = activeSeason?.episodes || [];
 
-  const relatedShows = SEED_CONTENT.filter(
-    (c) => c.id !== show.id && (c.contentType === 'tv' || c.contentType === 'anime')
-  );
-
-  const fallbackPoster =
-    'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80';
+  const fallbackPoster = '/images/neutral-poster.svg';
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 md:px-12 py-4 sm:py-6 space-y-6 sm:space-y-8 overflow-x-hidden">
@@ -408,14 +411,18 @@ function WatchTvContent({
               <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-primary text-white">
                 {show.contentType === 'anime' ? 'ANIME' : 'TV SERIES'}
               </span>
-              <Badge variant="rating" size="sm" className="flex items-center gap-1">
-                <IconStar className="w-3 h-3 fill-amber-300" />
-                {show.rating}
-              </Badge>
+              {show.rating !== undefined && show.rating > 0 && (
+                <Badge variant="rating" size="sm" className="flex items-center gap-1">
+                  <IconStar className="w-3 h-3 fill-amber-300" />
+                  {show.rating.toFixed(1)}
+                </Badge>
+              )}
               {show.quality && <Badge variant="quality" size="sm">{show.quality}</Badge>}
-              <Badge variant="outline" size="sm">
-                {show.year}
-              </Badge>
+              {show.year && (
+                <Badge variant="outline" size="sm">
+                  {show.year}
+                </Badge>
+              )}
               {show.ageRating && <Badge variant="outline" size="sm">{show.ageRating}</Badge>}
               <span className="text-xs text-slate-400 font-medium">
                 {show.seasons?.length || 1} Season{(show.seasons?.length || 1) > 1 ? 's' : ''} • {allEpisodes.length} Episodes
