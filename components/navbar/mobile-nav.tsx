@@ -11,6 +11,7 @@ import {
   IconUser,
   IconClapperboardPlay,
   IconBolt,
+  IconMoonStars,
 } from '@/components/ui/icons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -85,6 +86,16 @@ export function MobileHeader() {
           )}
         >
           Dramas
+        </Link>
+        <Link
+          href="/midnight"
+          className={cn(
+            'px-2.5 py-1 rounded-full whitespace-nowrap transition-colors font-medium flex items-center gap-1',
+            pathname === '/midnight' ? 'bg-primary text-white font-bold' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+          )}
+        >
+          <IconMoonStars className="w-3 h-3 text-indigo-400" />
+          Midnight
         </Link>
         <Link
           href="/collections"

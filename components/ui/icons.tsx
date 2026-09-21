@@ -137,6 +137,8 @@ export {
   IconLogout,
   IconBell,
   IconBellBing,
+  IconMoon,
+  IconMoonStars,
 } from '@devigner-ui/icons';
 
 // Semantic aliases for CineVault domain
@@ -186,4 +188,5 @@ export {
   IconInfoCircle as InfoIcon,
   IconStar as StarIcon,
   IconStars as SparklesIcon,
+  IconMoonStars as MidnightIcon,
 } from '@devigner-ui/icons';
