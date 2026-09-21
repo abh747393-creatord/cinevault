@@ -19,7 +19,6 @@ import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 let cachedAll: ContentItem[] | null = null;
 let cachedMovies: ContentItem[] | null = null;
 let cachedTv: ContentItem[] | null = null;
-let cachedMidnight: ContentItem[] | null = null;
 
 export default function HomePage() {
   const [infoModalContent, setInfoModalContent] = useState<ContentItem | null>(null);
@@ -27,7 +26,6 @@ export default function HomePage() {
   const [allContent, setAllContent] = useState<ContentItem[]>(() => cachedAll || []);
   const [moviesList, setMoviesList] = useState<ContentItem[]>(() => cachedMovies || []);
   const [tvList, setTvList] = useState<ContentItem[]>(() => cachedTv || []);
-  const [midnightList, setMidnightList] = useState<ContentItem[]>(() => cachedMidnight || []);
   const [loading, setLoading] = useState(() => !cachedAll);
 
   useEffect(() => {
@@ -62,8 +60,7 @@ export default function HomePage() {
       movieboxApi.homepage('all', 1),
       movieboxApi.homepage('movie', 1),
       movieboxApi.homepage('tv', 1),
-      movieboxApi.homepage('9', 1),
-    ]).then(([allRes, movieRes, tvRes, midnightRes]) => {
+    ]).then(([allRes, movieRes, tvRes]) => {
       if (!isMounted) return;
 
       if (allRes.status === 'fulfilled' && allRes.value?.items) {
@@ -86,12 +83,6 @@ export default function HomePage() {
           .map((it) => mapCatalogItem(it, tvRes.value.metrics));
         cachedTv = mapped;
         setTvList(mapped);
-      }
-
-      if (midnightRes.status === 'fulfilled' && midnightRes.value?.items) {
-        const mapped = midnightRes.value.items.map((it) => mapCatalogItem(it, midnightRes.value.metrics));
-        cachedMidnight = mapped;
-        setMidnightList(mapped);
       }
 
       setLoading(false);
@@ -194,16 +185,6 @@ export default function HomePage() {
             title="TV Shows & Series"
             items={tvList}
             exploreHref="/tv"
-            onOpenInfo={handleOpenInfo}
-          />
-        )}
-
-        {/* Midnight Section */}
-        {midnightList.length > 0 && (
-          <ContentRow
-            title="🌙 Midnight Specials"
-            items={midnightList}
-            exploreHref="/midnight"
             onOpenInfo={handleOpenInfo}
           />
         )}

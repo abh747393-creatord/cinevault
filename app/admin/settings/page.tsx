@@ -11,6 +11,11 @@ import {
   IconPlus,
   IconRefresh,
   IconBolt,
+  IconMoonStars,
+  IconLock,
+  IconEye,
+  IconEyeSlash,
+  IconShieldTick,
 } from '@/components/ui/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +30,7 @@ import {
 import { isLegitimateTitle } from '@/lib/utils/content-filter';
 
 export default function AdminSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'general' | 'hero' | 'safety' | 'cache'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'hero' | 'safety' | 'cache' | 'midnight'>('general');
 
   // Platform Settings State
   const [siteName, setSiteName] = useState('CineVault');
@@ -52,10 +57,105 @@ export default function AdminSettingsPage() {
   const [cacheFlushed, setCacheFlushed] = useState(false);
   const [flushing, setFlushing] = useState(false);
 
+  // Midnight Settings State
+  const [midnightSettings, setMidnightSettings] = useState<{
+    enabled: boolean;
+    isConfigured: boolean;
+    updatedAt?: string;
+    updatedBy?: string;
+  } | null>(null);
+  const [loadingMidnight, setLoadingMidnight] = useState(false);
+  const [togglingMidnight, setTogglingMidnight] = useState(false);
+  const [showChangePasscodeModal, setShowChangePasscodeModal] = useState(false);
+  const [newPasscode, setNewPasscode] = useState('');
+  const [confirmPasscode, setConfirmPasscode] = useState('');
+  const [showNewPasscode, setShowNewPasscode] = useState(false);
+  const [updatingPasscode, setUpdatingPasscode] = useState(false);
+  const [midnightMsg, setMidnightMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fetchMidnightSettings = async () => {
+    setLoadingMidnight(true);
+    try {
+      const res = await fetch('/api/admin/midnight');
+      if (res.ok) {
+        const data = await res.json();
+        setMidnightSettings(data);
+      }
+    } catch (e) {
+      console.error('Failed to load Midnight settings:', e);
+    } finally {
+      setLoadingMidnight(false);
+    }
+  };
+
   useEffect(() => {
     setHeroSlides(getStoredHeroSlides());
     setCustomBlacklist(getStoredCustomBlacklist());
+    fetchMidnightSettings();
   }, []);
+
+  const handleToggleMidnight = async (enabled: boolean) => {
+    setTogglingMidnight(true);
+    setMidnightMsg(null);
+    try {
+      const res = await fetch('/api/admin/midnight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', enabled }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMidnightSettings((prev) => (prev ? { ...prev, enabled: data.enabled } : null));
+        setMidnightMsg({ type: 'success', text: data.message });
+      } else {
+        setMidnightMsg({ type: 'error', text: data.error || 'Failed to update Midnight status.' });
+      }
+    } catch {
+      setMidnightMsg({ type: 'error', text: 'Network communication error.' });
+    } finally {
+      setTogglingMidnight(false);
+    }
+  };
+
+  const handleChangePasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPasscode.trim()) {
+      setMidnightMsg({ type: 'error', text: 'Passcode cannot be empty.' });
+      return;
+    }
+    if (newPasscode.trim() !== confirmPasscode.trim()) {
+      setMidnightMsg({ type: 'error', text: 'Passcodes do not match.' });
+      return;
+    }
+    if (newPasscode.trim().length < 4) {
+      setMidnightMsg({ type: 'error', text: 'Passcode must be at least 4 characters.' });
+      return;
+    }
+
+    setUpdatingPasscode(true);
+    setMidnightMsg(null);
+    try {
+      const res = await fetch('/api/admin/midnight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change_passcode', newPasscode: newPasscode.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMidnightMsg({ type: 'success', text: data.message });
+        setShowChangePasscodeModal(false);
+        setNewPasscode('');
+        setConfirmPasscode('');
+        fetchMidnightSettings();
+      } else {
+        setMidnightMsg({ type: 'error', text: data.error || 'Failed to update passcode.' });
+      }
+    } catch {
+      setMidnightMsg({ type: 'error', text: 'Network communication error.' });
+    } finally {
+      setUpdatingPasscode(false);
+    }
+  };
 
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +278,7 @@ export default function AdminSettingsPage() {
           { id: 'general', label: 'General Configuration', icon: IconSettings },
           { id: 'hero', label: `Hero Carousel (${heroSlides.filter((s) => s.active).length} Active)`, icon: IconStars },
           { id: 'safety', label: `Safety Blacklist (${customBlacklist.length} Custom)`, icon: IconFilter },
+          { id: 'midnight', label: 'Midnight Access', icon: IconMoonStars },
           { id: 'cache', label: 'Cache & Maintenance', icon: IconBolt },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -436,6 +537,218 @@ export default function AdminSettingsPage() {
                 <IconCheckCircle className="w-4 h-4" /> Cache Successfully Purged
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: MIDNIGHT ACCESS */}
+      {activeTab === 'midnight' && (
+        <div className="p-6 rounded-2xl bg-card border border-white/10 space-y-6 max-w-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <IconMoonStars className="w-5 h-5 text-indigo-400" />
+                Midnight Access Security
+              </h3>
+              <p className="text-xs text-slate-400">
+                Manage passcode protection, access gating, and 18+ enforcement for the Midnight section.
+              </p>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={fetchMidnightSettings}
+              disabled={loadingMidnight}
+              className="text-xs"
+            >
+              <IconRefresh className={`w-3.5 h-3.5 ${loadingMidnight ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+
+          {midnightMsg && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
+                midnightMsg.type === 'success'
+                  ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400'
+                  : 'bg-red-950/40 border-red-500/30 text-red-400'
+              }`}
+            >
+              {midnightMsg.type === 'success' ? (
+                <IconCheckCircle className="w-4 h-4 shrink-0" />
+              ) : (
+                <IconAlertTriangle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{midnightMsg.text}</span>
+            </div>
+          )}
+
+          {/* Status & Passcode Configuration Panel */}
+          <div className="p-5 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <span className="text-xs font-semibold text-slate-400 block">Section Status</span>
+                <div className="flex items-center gap-2 pt-0.5">
+                  {midnightSettings?.enabled ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Status: Enabled
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/30">
+                      <span className="w-2 h-2 rounded-full bg-red-400" />
+                      Status: Disabled
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-semibold text-slate-400 block">Security Passcode</span>
+                <div className="flex items-center gap-2 pt-0.5">
+                  {midnightSettings?.isConfigured ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                      <IconShieldTick className="w-3.5 h-3.5" />
+                      Passcode: Configured
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                      <IconAlertTriangle className="w-3.5 h-3.5" />
+                      Midnight passcode is not configured.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 text-xs text-slate-400">
+              <span className="font-semibold text-slate-300">Security Rule:</span> Passcodes are stored using server-side PBKDF2 cryptographic hashing. Plaintext passcodes and hashes are never exposed to clients.
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setShowChangePasscodeModal(true);
+                setMidnightMsg(null);
+                setNewPasscode('');
+                setConfirmPasscode('');
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-600/20"
+            >
+              <IconLock className="w-3.5 h-3.5" />
+              Change Passcode
+            </Button>
+
+            {midnightSettings?.enabled ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleToggleMidnight(false)}
+                disabled={togglingMidnight}
+                className="text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+              >
+                {togglingMidnight ? 'Disabling...' : 'Disable Midnight'}
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleToggleMidnight(true)}
+                disabled={togglingMidnight}
+                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/30"
+              >
+                {togglingMidnight ? 'Enabling...' : 'Enable Midnight'}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Change Passcode Modal */}
+      {showChangePasscodeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md p-6 rounded-2xl bg-card border border-white/15 space-y-5 shadow-2xl">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <IconLock className="w-5 h-5 text-indigo-400" />
+                Change Midnight Passcode
+              </h3>
+              <p className="text-xs text-slate-400">
+                Set a new access passcode for the restricted Midnight section.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-1">
+              <span className="font-bold flex items-center gap-1.5">
+                <IconAlertTriangle className="w-3.5 h-3.5 shrink-0" /> Immediate Invalidation:
+              </span>
+              <p className="text-slate-300">
+                Updating the passcode immediately invalidates all active user sessions and requires re-entry.
+              </p>
+            </div>
+
+            <form onSubmit={handleChangePasscode} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">New Passcode</label>
+                <div className="relative flex items-center">
+                  <input
+                    type={showNewPasscode ? 'text' : 'password'}
+                    value={newPasscode}
+                    onChange={(e) => setNewPasscode(e.target.value)}
+                    placeholder="Enter new passcode..."
+                    required
+                    autoFocus
+                    className="w-full h-10 pl-3 pr-10 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPasscode(!showNewPasscode)}
+                    className="absolute right-3 p-1 text-slate-400 hover:text-white"
+                  >
+                    {showNewPasscode ? <IconEyeSlash className="w-4 h-4" /> : <IconEye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">Confirm Passcode</label>
+                <input
+                  type={showNewPasscode ? 'text' : 'password'}
+                  value={confirmPasscode}
+                  onChange={(e) => setConfirmPasscode(e.target.value)}
+                  placeholder="Re-enter new passcode..."
+                  required
+                  className="w-full h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowChangePasscodeModal(false)}
+                  disabled={updatingPasscode}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={updatingPasscode || !newPasscode.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30"
+                >
+                  {updatingPasscode ? 'Updating...' : 'Update Passcode'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
