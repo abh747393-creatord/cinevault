@@ -4,17 +4,25 @@ export interface FranchiseCollection {
   id: string;
   slug: string;
   name: string;
-  category: 'movies' | 'anime' | 'dramas';
+  category: 'movies' | 'tv' | 'anime' | 'dramas' | 'all';
   tagline: string;
   description: string;
   bannerUrl: string;
   posterUrl: string;
-  itemCount: number;
+  itemCount?: number;
   featured?: boolean;
+  keywords?: string[];
+  genres?: string[];
+  languageHints?: string[];
+  titleHints?: string[];
+  providerTab?: 'all' | 'movie' | 'tv' | '9';
+  mediaType?: 'movie' | 'series' | 'all';
   searchQueries: string[];
   curatedTitles?: string[];
   requiredKeywords?: string[];
 }
+
+export type CollectionDefinition = FranchiseCollection;
 
 export interface Genre {
   id: string;

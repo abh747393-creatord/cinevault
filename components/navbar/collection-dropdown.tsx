@@ -124,7 +124,7 @@ export function CollectionDropdown() {
 
                   <div className="flex items-center gap-1.5 text-slate-500 group-hover:text-slate-300 shrink-0">
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
-                      {col.itemCount}+
+                      {col.itemCount !== undefined && col.itemCount > 0 ? `${col.itemCount}+` : 'Explore'}
                     </span>
                     <IconChevronRight className="w-3 h-3 text-slate-500 group-hover:text-red-400 group-hover:translate-x-0.5 transition-all" />
                   </div>
