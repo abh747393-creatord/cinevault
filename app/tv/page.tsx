@@ -33,9 +33,7 @@ export default function TvShowsPage() {
       }
 
       if (data && data.items && data.items.length > 0) {
-        const mapped: ContentItem[] = data.items
-          .filter((it: MovieBoxCatalogItem) => it.media_type === 'series' || ((it.season_count ?? 0) > 0))
-          .map((it: MovieBoxCatalogItem) => {
+        const mapped: ContentItem[] = data.items.map((it: MovieBoxCatalogItem) => {
             const metricRating = data?.metrics?.[it.id.value]?.rating;
             const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
             return {

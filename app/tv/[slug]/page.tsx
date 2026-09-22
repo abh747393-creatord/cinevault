@@ -35,7 +35,7 @@ export default function TvDetailsPage({ params }: { params: { slug: string } }) 
     setError(null);
 
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), 8000)
+      setTimeout(() => reject(new Error('Request timed out')), 15000)
     );
 
     try {
