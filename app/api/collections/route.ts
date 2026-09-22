@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { FRANCHISE_COLLECTIONS } from '@/lib/data/collections-data';
 import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
-import { scoreItemForCollection } from '@/lib/collections/collection-engine';
+import { scoreItemForCollection, getCachedCollectionContent } from '@/lib/collections/collection-engine';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,40 @@ interface CachedSummary {
 }
 
 let cachedSummary: CachedSummary | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+// High-yield seeds across all major collection categories to build a rich live catalog
+const CATEGORY_DISCOVERY_QUERIES = [
+  'Squid Game',
+  'Hidden Love',
+  'Demon Slayer',
+  'Avengers',
+  'Batman',
+  'The Conjuring',
+  'John Wick',
+  'Interstellar',
+  'Harry Potter',
+  'Jawan',
+  'Friends',
+  'Breaking Bad',
+  'Fast and Furious',
+  'Star Wars',
+  'The Godfather',
+];
+
+async function runWithLimit<T>(tasks: (() => Promise<T>)[], limit: number = 3): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < tasks.length; i += limit) {
+    const batch = tasks.slice(i, i + limit).map((fn) => fn());
+    const batchResults = await Promise.allSettled(batch);
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      }
+    }
+  }
+  return results;
+}
 
 export async function GET() {
   const now = Date.now();
@@ -20,13 +53,6 @@ export async function GET() {
   }
 
   try {
-    // 1. Fetch base homepage feeds to discover real live catalog
-    const [allFeed, movieFeed, tvFeed] = await Promise.allSettled([
-      movieboxApi.homepage('all', 1),
-      movieboxApi.homepage('movie', 1),
-      movieboxApi.homepage('tv', 1),
-    ]);
-
     const rawItems: MovieBoxCatalogItem[] = [];
     const seenIds = new Set<string>();
 
@@ -40,6 +66,13 @@ export async function GET() {
       }
     };
 
+    // 1. Fetch base homepage feeds
+    const [allFeed, movieFeed, tvFeed] = await Promise.allSettled([
+      movieboxApi.homepage('all', 1),
+      movieboxApi.homepage('movie', 1),
+      movieboxApi.homepage('tv', 1),
+    ]);
+
     if (allFeed.status === 'fulfilled' && allFeed.value?.items) {
       addItems(allFeed.value.items);
     }
@@ -50,8 +83,26 @@ export async function GET() {
       addItems(tvFeed.value.items);
     }
 
-    // 2. Score items for every collection definition
+    // 2. Fetch category search queries in parallel batches
+    const searchTasks = CATEGORY_DISCOVERY_QUERIES.map((q) => () =>
+      movieboxApi.search(q, 'moviebox', 1).catch(() => [])
+    );
+    const searchResults = await runWithLimit(searchTasks, 3);
+    for (const items of searchResults) {
+      addItems(items);
+    }
+
+    // 3. Score items for every collection definition
     const activeCollections = FRANCHISE_COLLECTIONS.map((col) => {
+      // Check if we already have full discovery cached for this collection
+      const cached = getCachedCollectionContent(col.slug);
+      if (cached && cached.length > 0) {
+        return {
+          ...col,
+          itemCount: cached.length,
+        };
+      }
+
       let matchCount = 0;
       for (const it of rawItems) {
         if (scoreItemForCollection(it, col) >= 5) {
@@ -64,20 +115,14 @@ export async function GET() {
       };
     });
 
-    // 3. Minimum Content Rule: Filter out collections that currently have 0 items
-    // (Note: If feed is temporarily empty e.g. upstream cold start, provide known active collections with placeholder count 0 so UI renders gracefully without crashing)
-    const validCollections = activeCollections.filter((c) => (c.itemCount || 0) > 0);
-    const resultCollections = validCollections.length > 0 ? validCollections : activeCollections;
-
     cachedSummary = {
-      collections: resultCollections,
+      collections: activeCollections,
       timestamp: now,
     };
 
-    return NextResponse.json({ collections: resultCollections });
+    return NextResponse.json({ collections: activeCollections });
   } catch (err) {
     console.error('[CollectionsAPI] Failed to aggregate collections:', err);
-    // Graceful fallback with zero-count definitions (never dummy content)
     return NextResponse.json({
       collections: FRANCHISE_COLLECTIONS.map((c) => ({ ...c, itemCount: 0 })),
     });
