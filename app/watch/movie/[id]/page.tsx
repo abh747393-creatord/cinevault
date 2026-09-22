@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { notFound, useSearchParams } from 'next/navigation';
+import { notFound, useSearchParams, useRouter } from 'next/navigation';
 import {
   IconArrowLeft,
   IconShare,
@@ -26,6 +26,7 @@ import { formatDuration } from '@/lib/utils';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist, getStoredHistory } from '@/lib/storage/local-storage-store';
 
 function WatchMovieContent({ params }: { params: { id: string } }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const timeParam = searchParams.get('t');
 
@@ -41,8 +42,18 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
     let isMounted = true;
     setLoadingMovie(true);
 
-    providerResolver.resolveMovie(params.id).then((resolved) => {
+    providerResolver.resolveMovie(params.id).then(async (resolved) => {
       if (isMounted) {
+        if (!resolved) {
+          try {
+            const tvItem = await providerResolver.resolveTvShow(params.id);
+            if (tvItem && isMounted) {
+              const firstEp = tvItem.seasons?.[0]?.episodes?.[0]?.id || 's1e1';
+              router.replace(`/watch/tv/${params.id}/${firstEp}`);
+              return;
+            }
+          } catch {}
+        }
         setMovie(resolved);
         setLoadingMovie(false);
 

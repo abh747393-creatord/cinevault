@@ -69,6 +69,10 @@ function WatchTvContent({
       ]);
 
       if (resolved) {
+        if (resolved.contentType === 'movie') {
+          router.replace(`/watch/movie/${params.id}`);
+          return;
+        }
         setShow(resolved);
         setError(null);
 
@@ -97,6 +101,14 @@ function WatchTvContent({
           }
         }).catch(() => {});
       } else {
+        // Check if this ID is actually a movie
+        try {
+          const movieItem = await providerResolver.resolveMovie(params.id);
+          if (movieItem) {
+            router.replace(`/watch/movie/${params.id}`);
+            return;
+          }
+        } catch {}
         setError('TV show details unavailable.');
       }
     } catch (err: any) {
@@ -232,13 +244,18 @@ function WatchTvContent({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Link href={`/tv/${show.slug}`}>
+            <Link href={`/watch/movie/${params.id}`}>
               <Button variant="primary" size="sm" className="text-xs font-semibold">
+                Play as Movie
+              </Button>
+            </Link>
+            <Link href={show ? `/tv/${show.slug}` : '/tv'}>
+              <Button variant="secondary" size="sm" className="text-xs font-semibold">
                 View Series Details
               </Button>
             </Link>
             <Link href="/tv">
-              <Button variant="secondary" size="sm" className="text-xs font-semibold">
+              <Button variant="glass" size="sm" className="text-xs font-semibold">
                 Browse TV Shows
               </Button>
             </Link>

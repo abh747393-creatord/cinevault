@@ -70,7 +70,10 @@ export default function MidnightPage() {
   // Map raw MovieBox catalog items into CineVault ContentItem objects
   const mapToContentItem = useCallback((it: any): ContentItem => {
     const rawId = it.id?.value || (typeof it.id === 'string' ? it.id : it.subjectId || '');
-    const isSeries = it.media_type === 'series' || it.type === 'series' || it.season_count !== undefined;
+    const isSeries =
+      it.media_type === 'series' ||
+      it.type === 'series' ||
+      (it.media_type !== 'movie' && it.type !== 'movie' && typeof it.season_count === 'number' && it.season_count > 0);
     const rawTitle = it.title || it.name || 'Untitled';
     const titleLower = rawTitle.toLowerCase();
     const hasHindi =
@@ -639,7 +642,7 @@ export default function MidnightPage() {
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link href={`/${featuredItem.contentType === 'tv' ? 'watch/tv' : 'watch/movie'}/${featuredItem.id}${featuredItem.contentType === 'tv' ? '/ep-1' : ''}`}>
+              <Link href={`/${featuredItem.contentType === 'tv' ? 'watch/tv' : 'watch/movie'}/${featuredItem.id}${featuredItem.contentType === 'tv' ? '/s1e1' : ''}`}>
                 <Button
                   variant="primary"
                   size="md"

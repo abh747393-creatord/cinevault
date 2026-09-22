@@ -224,6 +224,12 @@ export class MovieBoxProvider implements ContentProvider {
       if (match) {
         season = parseInt(match[1], 10);
         episode = parseInt(match[2], 10);
+      } else {
+        const altMatch = episodeId.match(/ep(?:isode)?[-\s_]?(\d+)/i) || episodeId.match(/^(\d+)$/);
+        if (altMatch) {
+          season = 1;
+          episode = parseInt(altMatch[1], 10);
+        }
       }
     }
 
