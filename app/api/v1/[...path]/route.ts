@@ -40,9 +40,15 @@ export async function GET(
     });
   } catch (err: any) {
     clearTimeout(timer);
+    const isAborted = controller.signal.aborted || err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
     console.error(`[ApiV1Proxy] Failed to fetch ${targetUrl}:`, err?.message || err);
     return NextResponse.json(
-      { error: err?.name === 'AbortError' ? 'Upstream request timed out' : 'Unable to connect to streaming backend' },
+      {
+        error: isAborted ? 'Upstream request timed out' : 'Unable to connect to streaming backend',
+        details: String(err?.message || err),
+        targetUrl,
+        aborted: controller.signal.aborted,
+      },
       { status: 504 }
     );
   }
