@@ -13,7 +13,7 @@ export function ConsumerFooter() {
   }
 
   return (
-    <footer className="w-full bg-black/60 border-t border-white/10 py-10 px-6 mt-16 select-none hidden md:block">
+    <footer className="w-full bg-black/60 border-t border-white/10 py-10 px-6 mt-16 select-none block pb-24 md:pb-10">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-accent flex items-center justify-center">
@@ -29,7 +29,7 @@ export function ConsumerFooter() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-6 gap-y-2.5 text-xs text-slate-400">
           <Link href="/movies" className="hover:text-white transition-colors">
             Movies
           </Link>
@@ -39,13 +39,22 @@ export function ConsumerFooter() {
           <Link href="/anime" className="hover:text-white transition-colors">
             Anime
           </Link>
+          <Link href="/collections" className="hover:text-white transition-colors">
+            Collections
+          </Link>
           <Link href="/history" className="hover:text-white transition-colors">
             Watch History
           </Link>
           <Link href="/settings" className="hover:text-white transition-colors">
             Settings
           </Link>
-          <Link href="/admin/login" className="text-slate-500 hover:text-slate-300 transition-colors">
+          <Link
+            href="/midnight"
+            className="text-slate-600 hover:text-slate-400 transition-colors"
+          >
+            Midnight
+          </Link>
+          <Link href="/admin/login" className="text-slate-600 hover:text-slate-400 transition-colors">
             Admin Login
           </Link>
         </div>

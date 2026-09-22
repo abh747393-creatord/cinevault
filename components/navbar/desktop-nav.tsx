@@ -15,7 +15,6 @@ import {
   IconStars,
   IconSettings,
   IconChevronDown,
-  IconMoonStars,
 } from '@/components/ui/icons';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
@@ -148,21 +147,6 @@ export function DesktopNav() {
 
             {/* Dramas Dropdown */}
             <DramaDropdown />
-
-            {/* Midnight Link */}
-            <Link
-              href="/midnight"
-              prefetch={false}
-              className={cn(
-                'px-2 py-1.5 text-xs xl:text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-150 flex items-center gap-1.5',
-                pathname === '/midnight'
-                  ? 'text-indigo-300 bg-indigo-500/20 border border-indigo-500/40 font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10'
-              )}
-            >
-              <IconMoonStars className="w-3.5 h-3.5 text-indigo-400" />
-              Midnight
-            </Link>
 
             {/* Trending Quick Link */}
             <Link
