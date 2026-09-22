@@ -402,34 +402,69 @@ export default function MidnightPage() {
   // ----------------------------------------------------
   if (!authStatus.authenticated) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm sm:max-w-md p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-indigo-950/40 via-card/80 to-card border border-indigo-500/30 backdrop-blur-2xl shadow-2xl space-y-6">
+      <div className="min-h-[85vh] flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm sm:max-w-md p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-indigo-950/40 via-card/85 to-card border border-indigo-500/30 backdrop-blur-2xl shadow-2xl space-y-6">
           {/* Header */}
           <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-lg shadow-indigo-600/20">
+            <div className="relative inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-lg shadow-indigo-600/20">
               <IconMoonStars className="w-7 h-7 sm:w-8 sm:h-8" />
+              <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white border border-red-400 shadow-md">
+                18+
+              </span>
             </div>
 
-            <div className="space-y-1">
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                RESTRICTED SECTION
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  RESTRICTED SECTION
+                </span>
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30">
+                  18+ ONLY
+                </span>
+              </div>
+
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                 Midnight Access
               </h1>
-              <p className="text-xs sm:text-sm text-slate-400">
-                Enter the access passcode to unlock this catalog.
+
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-sm mx-auto">
+                Late-night adult cinema, mature productions, and explicit content. Strictly restricted to viewers aged 18 and older.
               </p>
             </div>
+          </div>
+
+          {/* Details Notice Box */}
+          <div className="p-3.5 rounded-2xl bg-black/40 border border-red-500/25 space-y-2 text-left">
+            <div className="flex items-center gap-2 text-xs font-bold text-red-400">
+              <IconShieldWarning className="w-4 h-4 shrink-0 text-red-400" />
+              <span>Mature & Restricted Catalog Details</span>
+            </div>
+            <ul className="text-[11px] sm:text-xs text-slate-400 space-y-1.5 pl-1">
+              <li className="flex items-start gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1" />
+                <span><strong className="text-slate-200">18+ Content Only:</strong> Contains adult themes, romantic thrillers, and uncut cinema.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-1" />
+                <span><strong className="text-slate-200">Passcode Protected:</strong> Requires authorized administrative passcode to view.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
+                <span><strong className="text-slate-200">Age Verification:</strong> Legal age acknowledgment required before streaming.</span>
+              </li>
+            </ul>
           </div>
 
           {/* Passcode Form */}
           <form onSubmit={handlePasscodeSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <IconLock className="w-3.5 h-3.5 text-indigo-400" />
-                Passcode
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <IconLock className="w-3.5 h-3.5 text-indigo-400" />
+                  Passcode
+                </label>
+                <span className="text-[10px] text-slate-500 font-medium">Secured with PBKDF2</span>
+              </div>
               <div className="relative flex items-center">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -438,7 +473,7 @@ export default function MidnightPage() {
                     setPasscode(e.target.value);
                     if (authError) setAuthError(null);
                   }}
-                  placeholder="Enter passcode..."
+                  placeholder="Enter access passcode..."
                   autoFocus
                   required
                   className="w-full h-12 pl-4 pr-11 rounded-xl bg-black/60 border border-indigo-500/30 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-white placeholder-slate-500 text-sm tracking-wider outline-none transition-all"
@@ -478,18 +513,23 @@ export default function MidnightPage() {
                   Verifying...
                 </>
               ) : (
-                'Continue'
+                'Unlock Midnight Vault'
               )}
             </Button>
           </form>
 
-          <div className="text-center pt-2">
-            <Link
-              href="/"
-              className="text-xs text-slate-400 hover:text-white transition-colors font-medium"
-            >
-              ← Back to CineVault Home
-            </Link>
+          <div className="text-center pt-1 space-y-2">
+            <p className="text-[11px] text-slate-500">
+              Need access? Contact your platform admin for passcode.
+            </p>
+            <div>
+              <Link
+                href="/"
+                className="text-xs text-slate-400 hover:text-white transition-colors font-medium inline-flex items-center gap-1"
+              >
+                ← Back to CineVault Home
+              </Link>
+            </div>
           </div>
         </div>
       </div>
