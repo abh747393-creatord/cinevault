@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
   // 4. Fetch genuine upstream Midnight feed (tab=9)
   try {
     const upstreamFeed = await movieboxApi.homepage('9', page);
-    return NextResponse.json(upstreamFeed || { items: [], metrics: {} });
+    const items = Array.isArray(upstreamFeed) ? upstreamFeed : (upstreamFeed as any)?.items || [];
+    const metrics = (upstreamFeed as any)?.metrics || {};
+    return NextResponse.json({ items, metrics });
   } catch (err: any) {
     console.error('[MidnightContentAPI] Upstream fetch error:', err);
     return NextResponse.json(

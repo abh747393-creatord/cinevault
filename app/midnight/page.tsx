@@ -58,6 +58,7 @@ export default function MidnightPage() {
   const [searchResults, setSearchResults] = useState<ContentItem[] | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
 
   const midnightCategories = [
     { label: '🌙 All Midnight', value: 'all' },
@@ -67,17 +68,18 @@ export default function MidnightPage() {
   ];
 
   // Map raw MovieBox catalog items into CineVault ContentItem objects
-  const mapToContentItem = useCallback((it: MovieBoxCatalogItem): ContentItem => {
-    const rawId = it.id.value;
-    const isSeries = it.media_type === 'series';
-    const titleLower = it.title.toLowerCase();
+  const mapToContentItem = useCallback((it: any): ContentItem => {
+    const rawId = it.id?.value || (typeof it.id === 'string' ? it.id : it.subjectId || '');
+    const isSeries = it.media_type === 'series' || it.type === 'series' || it.season_count !== undefined;
+    const rawTitle = it.title || it.name || 'Untitled';
+    const titleLower = rawTitle.toLowerCase();
     const hasHindi =
       titleLower.includes('hindi') ||
       titleLower.includes('dub') ||
       titleLower.includes('tamil') ||
       titleLower.includes('telugu');
 
-    const cleanTitle = getCanonicalTitle(it.title);
+    const cleanTitle = getCanonicalTitle(rawTitle);
 
     const genres = [
       { id: 'g-midnight', name: 'Midnight', slug: 'midnight' },
@@ -88,15 +90,17 @@ export default function MidnightPage() {
       ? ['Hindi / Regional (Dub)', 'Original Audio']
       : ['Original Audio', 'English Subtitles'];
 
+    const posterUrl = it.poster_url || it.poster || it.cover || '/images/neutral-poster.svg';
+
     return {
       id: `mb-${rawId}`,
-      externalId: rawId,
-      title: cleanTitle || it.title,
+      externalId: String(rawId),
+      title: cleanTitle || rawTitle,
       slug: `mb-${rawId}`,
       contentType: isSeries ? 'tv' : 'movie',
-      posterUrl: it.poster_url || '/images/neutral-poster.svg',
-      backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
-      description: `${cleanTitle || it.title} (${it.year || 'Midnight Edition'})`,
+      posterUrl,
+      backdropUrl: posterUrl,
+      description: `${cleanTitle || rawTitle} (${it.year || 'Midnight Edition'})`,
       releaseDate: it.year ? `${it.year}-01-01` : '',
       year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
       genres,
@@ -144,6 +148,7 @@ export default function MidnightPage() {
   // 2. Fetch genuine upstream Midnight content once authenticated AND disclaimer accepted
   const loadContent = useCallback(async () => {
     setLoadingContent(true);
+    setContentError(null);
     try {
       const res = await fetch('/api/midnight/content?page=1', { cache: 'no-store' });
       if (res.ok) {
@@ -153,12 +158,13 @@ export default function MidnightPage() {
         const uniqueItems: ContentItem[] = [];
 
         for (const item of rawItems) {
-          const idVal = item.id?.value;
-          if (!idVal || seenIds.has(idVal)) continue;
-          seenIds.add(idVal);
+          const idVal = item.id?.value || (typeof item.id === 'string' ? item.id : item.subjectId);
+          if (!idVal || seenIds.has(String(idVal))) continue;
+          seenIds.add(String(idVal));
           uniqueItems.push(mapToContentItem(item));
         }
 
+        setMidnightList(uniqueItems);
       } else if (res.status === 401 || res.status === 403) {
         // Session expired or disabled
         checkStatus();
@@ -173,19 +179,26 @@ export default function MidnightPage() {
           const uniqueItems: ContentItem[] = [];
 
           for (const item of rawItems) {
-            const idVal = item.id?.value;
-            if (!idVal || seenIds.has(idVal)) continue;
-            seenIds.add(idVal);
-            uniqueItems.push(mapToContentItem(item));
+            const raw = item as any;
+            const idVal = raw.id?.value || (typeof raw.id === 'string' ? raw.id : raw.subjectId);
+            if (!idVal || seenIds.has(String(idVal))) continue;
+            seenIds.add(String(idVal));
+            uniqueItems.push(mapToContentItem(raw));
           }
 
-          setMidnightList(uniqueItems);
+          if (uniqueItems.length > 0) {
+            setMidnightList(uniqueItems);
+          } else {
+            setContentError('No Midnight titles currently available from the provider feed.');
+          }
         } catch (clientErr) {
           console.error('Client fallback also failed:', clientErr);
+          setContentError('Failed to connect to the Midnight provider feed. Please try again.');
         }
       }
     } catch (err) {
       console.error('Failed to load Midnight content:', err);
+      setContentError('Failed to load Midnight content. Please check your connection and try again.');
     } finally {
       setLoadingContent(false);
     }
@@ -694,6 +707,23 @@ export default function MidnightPage() {
                 {filteredMidnight.map((item) => (
                   <ContentCard key={item.id} content={item} />
                 ))}
+              </div>
+            ) : contentError ? (
+              <div className="py-20 text-center space-y-3 bg-red-950/20 rounded-2xl border border-red-500/20">
+                <IconAlertCircle className="w-10 h-10 text-red-400 mx-auto" />
+                <h3 className="text-sm font-bold text-white">Connection Error</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">{contentError}</p>
+                <div className="pt-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => loadContent()}
+                    className="text-xs font-semibold"
+                  >
+                    <IconRefresh className="w-3.5 h-3.5 mr-1.5" />
+                    Retry Connection
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
