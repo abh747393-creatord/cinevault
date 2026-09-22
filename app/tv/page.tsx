@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { IconTV, IconSliderHorizontal, IconClose } from '@/components/ui/icons';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { IconTV, IconSliderHorizontal, IconClose, IconAlertCircle } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { GENRES } from '@/lib/constants/genres';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
+import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 
 let cachedLiveTv: ContentItem[] | null = null;
 
@@ -20,50 +21,63 @@ export default function TvShowsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveTv, setLiveTv] = useState<ContentItem[]>(() => cachedLiveTv || []);
   const [loading, setLoading] = useState(() => !cachedLiveTv);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    if (cachedLiveTv && cachedLiveTv.length > 0) return;
-
+  const loadTv = useCallback(async () => {
     setLoading(true);
-    import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
-      movieboxApi.homepage('tv', 1).then((data) => {
-        if (!isMounted) return;
-        if (data && data.items && data.items.length > 0) {
-          const mapped: ContentItem[] = data.items
-            .filter((it) => it.media_type === 'series' || ((it.season_count ?? 0) > 0))
-            .map((it) => {
-              const metricRating = data.metrics?.[it.id.value]?.rating;
-              const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
-              return {
-                id: `mb-${it.id.value}`,
-                externalId: it.id.value,
-                title: it.title,
-                slug: `mb-${it.id.value}`,
-                contentType: 'tv',
-                posterUrl: it.poster_url || '/images/neutral-poster.svg',
-                backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
-                description: `${it.title} (${it.year || 'Television Series'})`,
-                releaseDate: it.year ? `${it.year}-01-01` : '',
-                year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-                rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
-                genres: [],
-                language: 'English',
-                status: 'ongoing',
-              };
-            });
+    setError(null);
+    try {
+      let data = await movieboxApi.homepage('tv', 1).catch(() => null);
+      if (!data || !data.items || data.items.length === 0) {
+        data = await movieboxApi.homepage('all', 1).catch(() => null);
+      }
+
+      if (data && data.items && data.items.length > 0) {
+        const mapped: ContentItem[] = data.items
+          .filter((it: MovieBoxCatalogItem) => it.media_type === 'series' || ((it.season_count ?? 0) > 0))
+          .map((it: MovieBoxCatalogItem) => {
+            const metricRating = data?.metrics?.[it.id.value]?.rating;
+            const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+            return {
+              id: `mb-${it.id.value}`,
+              externalId: it.id.value,
+              title: it.title,
+              slug: `mb-${it.id.value}`,
+              contentType: 'tv',
+              posterUrl: it.poster_url || '/images/neutral-poster.svg',
+              backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+              description: `${it.title} (${it.year || 'Television Series'})`,
+              releaseDate: it.year ? `${it.year}-01-01` : '',
+              year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+              rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+              genres: [],
+              language: 'English',
+              status: 'ongoing',
+            };
+          });
+
+        if (mapped.length > 0) {
           cachedLiveTv = mapped;
           setLiveTv(mapped);
+          setError(null);
+        } else {
+          setLiveTv([]);
         }
-        setLoading(false);
-      }).catch(() => {
-        if (isMounted) setLoading(false);
-      });
-    });
-    return () => {
-      isMounted = false;
-    };
+      } else {
+        setError('Unable to load television shows from the streaming provider.');
+      }
+    } catch (err: any) {
+      console.error('[TvPage] Failed to fetch TV shows:', err);
+      setError('Unable to load content right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (cachedLiveTv && cachedLiveTv.length > 0) return;
+    loadTv();
+  }, [loadTv]);
 
   const filteredTv = useMemo(() => {
     let list: ContentItem[] = [...liveTv];
@@ -168,6 +182,20 @@ export default function TvShowsPage() {
             <div className="py-24 flex flex-col items-center justify-center space-y-3">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-slate-400 text-xs font-medium">Loading genuine television catalog...</p>
+            </div>
+          ) : error && liveTv.length === 0 ? (
+            <div className="py-20 text-center space-y-4 bg-red-950/20 rounded-2xl border border-red-500/20 p-6">
+              <IconAlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+              <h3 className="text-base font-bold text-white">Unable to load TV shows</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">{error}</p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => loadTv()}
+                className="text-xs font-semibold px-5"
+              >
+                Retry
+              </Button>
             </div>
           ) : filteredTv.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">

@@ -24,7 +24,7 @@ import { ContentCard } from '@/components/cards/content-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContentItem } from '@/types/content';
-import { MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
+import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 import { getCanonicalTitle } from '@/lib/utils/content-filter';
 
 interface AuthStatus {
@@ -175,7 +175,6 @@ export default function MidnightPage() {
         // Upstream provider temporarily unreachable from serverless container;
         // fallback to direct client-side provider fetch since session is verified
         try {
-          const { movieboxApi } = await import('@/lib/api/moviebox-client');
           const data = await movieboxApi.homepage('9', 1);
           const rawItems = data?.items || [];
           const seenIds = new Set<string>();

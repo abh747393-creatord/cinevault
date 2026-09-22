@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   IconFlame,
@@ -24,6 +24,7 @@ export default function DramasPage() {
   const [searchResults, setSearchResults] = useState<ContentItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const dramaCategories = [
     { label: 'All Dramas', value: 'all' },
@@ -96,37 +97,59 @@ export default function DramasPage() {
   };
 
   // Initial load: Fetch top dramas across Asian, Korean, Pakistani, and Turkish catalogs
-  useEffect(() => {
-    let isMounted = true;
-    async function loadDramas() {
-      try {
-        setLoading(true);
-        const searchPromises = TOP_DRAMA_QUERIES.slice(0, 12).map((query) =>
-          movieboxApi.search(query).catch(() => [])
-        );
+  const loadDramas = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Try server-side collections first
+      const [kdramaRes, asianRes] = await Promise.all([
+        fetch('/api/collections/k-drama?page=1', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/collections/asian-drama?page=1', { cache: 'no-store' }).catch(() => null),
+      ]);
 
-        const resultsArrays = await Promise.all(searchPromises);
-        if (!isMounted) return;
-
-        const flattened = resultsArrays.flat();
-
-        // Strictly clean out adult/mockbuster content and deduplicate
-        const cleaned = deduplicateAndCleanCatalog(flattened);
-        const uniqueItems = cleaned.map(mapToContentItem);
-
-        setDramasList(uniqueItems);
-      } catch (err) {
-        console.error('Failed to load drama items:', err);
-      } finally {
-        if (isMounted) setLoading(false);
+      const items: ContentItem[] = [];
+      if (kdramaRes && kdramaRes.ok) {
+        const data = await kdramaRes.json();
+        if (data.items) items.push(...data.items);
       }
-    }
+      if (asianRes && asianRes.ok) {
+        const data = await asianRes.json();
+        if (data.items) items.push(...data.items);
+      }
 
-    loadDramas();
-    return () => {
-      isMounted = false;
-    };
+      if (items.length > 0) {
+        const unique = Array.from(new Map(items.map((i) => [i.id, i])).values());
+        setDramasList(unique);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Direct provider search fallback
+      const searchPromises = TOP_DRAMA_QUERIES.slice(0, 12).map((query) =>
+        movieboxApi.search(query).catch(() => [] as MovieBoxCatalogItem[])
+      );
+
+      const resultsArrays = await Promise.all(searchPromises);
+      const flattened = resultsArrays.flat();
+      const cleaned = deduplicateAndCleanCatalog(flattened);
+      const uniqueItems = cleaned.map(mapToContentItem);
+
+      if (uniqueItems.length > 0) {
+        setDramasList(uniqueItems);
+      } else {
+        setError('Unable to load drama catalog from the streaming provider.');
+      }
+    } catch (err) {
+      console.error('Failed to load drama items:', err);
+      setError('Unable to load drama series right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDramas();
+  }, [loadDramas]);
 
   // Handle live search
   const handleSearch = async (e: React.FormEvent) => {
@@ -353,6 +376,18 @@ export default function DramasPage() {
             <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
               <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
               <p className="text-sm text-slate-400 font-medium">Loading drama catalog...</p>
+            </div>
+          ) : error ? (
+            <div className="py-16 text-center space-y-4 bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-md mx-auto">
+              <p className="text-sm font-medium text-red-400">{error}</p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={loadDramas}
+                className="bg-amber-600 hover:bg-amber-500 text-white"
+              >
+                Retry
+              </Button>
             </div>
           ) : filteredDramas.length === 0 ? (
             <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/10 space-y-4">

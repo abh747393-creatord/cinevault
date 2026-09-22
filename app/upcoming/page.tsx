@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   IconCalendar,
@@ -22,7 +22,8 @@ export default function UpcomingPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [liveUpcoming, setLiveUpcoming] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const categories = [
     { label: 'All Upcoming', value: 'all' },
@@ -32,46 +33,67 @@ export default function UpcomingPage() {
     { label: '🎨 Animation', value: 'animation' },
   ];
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadUpcoming = useCallback(async () => {
     setLoading(true);
-    // Fetch fresh upcoming releases from MovieBox gateway
-    movieboxApi.homepage('movie', 1).then((data) => {
-      if (!isMounted) return;
-      if (data && data.items) {
-        const upcoming2026 = data.items
-          .filter((it) => it.year && parseInt(it.year, 10) >= 2026)
-          .map((it) => {
-            const metricRating = data.metrics?.[it.id.value]?.rating;
-            const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
-            return {
-              id: `mb-${it.id.value}`,
-              externalId: it.id.value,
-              title: it.title,
-              slug: `mb-${it.id.value}`,
-              contentType: (it.media_type === 'series' ? 'tv' : 'movie') as 'movie' | 'tv',
-              posterUrl: it.poster_url || '/images/neutral-poster.svg',
-              backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
-              description: `${it.title} (${it.year || '2026'}) - Highly anticipated upcoming release on CineVault.`,
-              releaseDate: it.year ? `${it.year}-07-01` : '2026-07-01',
-              year: parseInt(it.year || '2026', 10),
-              rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
-              genres: [{ id: 'g-upcoming', name: 'Upcoming', slug: 'upcoming' }],
-              language: 'English',
-              status: 'upcoming' as const,
-            };
-          });
-        setLiveUpcoming(upcoming2026);
-      }
-      setLoading(false);
-    }).catch(() => {
-      if (isMounted) setLoading(false);
-    });
+    setError(null);
+    try {
+      const [movieData, allData] = await Promise.all([
+        movieboxApi.homepage('movie', 1).catch(() => null),
+        movieboxApi.homepage('all', 1).catch(() => null),
+      ]);
 
-    return () => {
-      isMounted = false;
-    };
+      const combinedItems = [
+        ...(movieData?.items || []),
+        ...(allData?.items || []),
+      ];
+
+      // Deduplicate by item ID
+      const seen = new Set<string>();
+      const uniqueItems = combinedItems.filter((it) => {
+        if (!it || !it.id?.value) return false;
+        if (seen.has(it.id.value)) return false;
+        seen.add(it.id.value);
+        return true;
+      });
+
+      const upcoming = uniqueItems
+        .filter((it) => {
+          const y = it.year ? parseInt(it.year, 10) : 0;
+          return y >= 2026;
+        })
+        .map((it) => {
+          const metricRating = movieData?.metrics?.[it.id.value]?.rating || allData?.metrics?.[it.id.value]?.rating;
+          const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+          return {
+            id: `mb-${it.id.value}`,
+            externalId: it.id.value,
+            title: it.title,
+            slug: `mb-${it.id.value}`,
+            contentType: (it.media_type === 'series' ? 'tv' : 'movie') as 'movie' | 'tv',
+            posterUrl: it.poster_url || '/images/neutral-poster.svg',
+            backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+            description: `${it.title} (${it.year || '2026'}) - Highly anticipated upcoming release on CineVault.`,
+            releaseDate: it.year ? `${it.year}-07-01` : '2026-07-01',
+            year: parseInt(it.year || '2026', 10),
+            rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+            genres: [{ id: 'g-upcoming', name: 'Upcoming', slug: 'upcoming' }],
+            language: 'English',
+            status: 'upcoming' as const,
+          };
+        });
+
+      setLiveUpcoming(upcoming);
+    } catch (err) {
+      console.error('[UpcomingPage] Failed to load upcoming releases:', err);
+      setError('Unable to load upcoming releases from the streaming provider.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadUpcoming();
+  }, [loadUpcoming]);
 
   const allUpcoming = useMemo(() => {
     return liveUpcoming;
@@ -200,12 +222,12 @@ export default function UpcomingPage() {
           </div>
 
           <div className="text-xs text-slate-400 font-medium">
-            Showing {filteredItems.length} upcoming titles
+            {loading ? 'Checking upcoming releases...' : `Showing ${filteredItems.length} upcoming titles`}
           </div>
         </div>
 
         {/* Spotlight Card */}
-        {!searchQuery && selectedCategory === 'all' && spotlightItem && (
+        {!loading && !error && !searchQuery && selectedCategory === 'all' && spotlightItem && (
           <div className="relative rounded-3xl overflow-hidden border border-amber-500/30 bg-gradient-to-br from-amber-950/40 via-card to-background p-6 sm:p-8 flex flex-col md:flex-row gap-6 items-center shadow-2xl">
             <div className="w-full md:w-56 h-80 rounded-2xl overflow-hidden shrink-0 shadow-lg relative bg-black/60">
               <img
@@ -276,21 +298,53 @@ export default function UpcomingPage() {
           </div>
         )}
 
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="py-24 flex flex-col items-center justify-center space-y-3">
+            <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-slate-400 text-xs font-medium">Scanning live provider upcoming schedules...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {!loading && error && (
+          <div className="py-16 text-center space-y-4 bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-md mx-auto">
+            <p className="text-sm font-medium text-red-400">{error}</p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={loadUpcoming}
+              className="bg-amber-600 hover:bg-amber-500 text-white"
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Upcoming Grid */}
-        {filteredItems.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-            {filteredItems.map((item) => (
-              <ContentCard key={item.id} content={item} className="w-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
-            <IconClapperboardPlay className="w-12 h-12 text-slate-500 mx-auto" />
-            <h3 className="text-base font-bold text-white">No upcoming titles found</h3>
-            <p className="text-xs text-slate-400">
-              Try a different keyword or browse all upcoming releases.
-            </p>
-          </div>
+        {!loading && !error && (
+          <>
+            {filteredItems.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+                {filteredItems.map((item) => (
+                  <ContentCard key={item.id} content={item} className="w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="py-20 text-center space-y-3 bg-white/5 rounded-2xl border border-white/5">
+                <IconClapperboardPlay className="w-12 h-12 text-slate-500 mx-auto" />
+                <h3 className="text-base font-bold text-white">No upcoming titles found</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  {searchQuery
+                    ? `No upcoming titles matching "${searchQuery}". Try a different keyword.`
+                    : 'No upcoming titles currently scheduled in the provider catalog. Check back soon for upcoming theatrical and streaming premieres.'}
+                </p>
+                <Button variant="secondary" size="sm" onClick={loadUpcoming}>
+                  Refresh
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -1,8 +1,10 @@
+export const CANONICAL_BACKEND_URL = 'https://desktop-p1cthbu.tailbb54ee.ts.net';
+
 export const RUST_API_BASE = (
   process.env.NEXT_PUBLIC_RUST_API_URL ||
   process.env.RUST_API_URL ||
   process.env.NEXT_PUBLIC_MOVIEBOX_API_URL ||
-  'http://localhost:8080'
+  CANONICAL_BACKEND_URL
 ).replace(/\/+$/, '');
 
 export const MOVIEBOX_API_BASE = `${RUST_API_BASE}/api/v1`;
@@ -112,7 +114,7 @@ function setCached<T>(key: string, data: T, ttlSeconds: number = 600): void {
   apiCache.set(key, { data, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 12000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -121,9 +123,39 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
       signal: controller.signal,
     });
     clearTimeout(timer);
+
+    // If same-origin proxy returned a 5xx error, try direct Rust backend
+    if (!res.ok && url.startsWith('/api/v1')) {
+      const fallbackUrl = `${RUST_API_BASE}${url}`;
+      const fbController = new AbortController();
+      const fbTimer = setTimeout(() => fbController.abort(), 8000);
+      try {
+        const fbRes = await fetch(fallbackUrl, { ...options, signal: fbController.signal });
+        clearTimeout(fbTimer);
+        if (fbRes.ok) return fbRes;
+      } catch {
+        clearTimeout(fbTimer);
+      }
+    }
+
     return res;
   } catch (err) {
     clearTimeout(timer);
+
+    // If same-origin proxy threw a network error / abort, try direct Rust backend
+    if (url.startsWith('/api/v1')) {
+      const fallbackUrl = `${RUST_API_BASE}${url}`;
+      const fbController = new AbortController();
+      const fbTimer = setTimeout(() => fbController.abort(), 8000);
+      try {
+        const fbRes = await fetch(fallbackUrl, { ...options, signal: fbController.signal });
+        clearTimeout(fbTimer);
+        return fbRes;
+      } catch {
+        clearTimeout(fbTimer);
+      }
+    }
+
     throw err;
   }
 }
@@ -131,8 +163,16 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 export class MovieBoxApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = MOVIEBOX_API_BASE) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+  constructor(baseUrl?: string) {
+    if (baseUrl) {
+      this.baseUrl = baseUrl.replace(/\/+$/, '');
+    } else if (typeof window !== 'undefined') {
+      // In browser: use same-origin proxy for maximum stability and zero CORS issues
+      this.baseUrl = '/api/v1';
+    } else {
+      // Server-side: connect directly to Rust backend
+      this.baseUrl = MOVIEBOX_API_BASE;
+    }
   }
 
   async health(): Promise<{ status: string; version: string; providers: string[] }> {

@@ -32,6 +32,7 @@ export default function CollectionDetailPage({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv'>('all');
+  const [error, setError] = useState<string | null>(null);
 
   // Load items for a given page
   const fetchPage = useCallback(
@@ -41,6 +42,7 @@ export default function CollectionDetailPage({
         setLoadingMore(true);
       } else {
         setLoading(true);
+        setError(null);
       }
 
       try {
@@ -89,6 +91,9 @@ export default function CollectionDetailPage({
         setPage(targetPage);
       } catch (err) {
         console.error('Failed to load collection items:', err);
+        if (!append) {
+          setError('Unable to load collection items. Please check your connection.');
+        }
       } finally {
         setLoading(false);
         setLoadingMore(false);
@@ -249,8 +254,23 @@ export default function CollectionDetailPage({
           </div>
         )}
 
+        {/* Error State */}
+        {!loading && error && items.length === 0 && (
+          <div className="py-16 text-center space-y-4 bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-md mx-auto">
+            <p className="text-sm font-medium text-red-400">{error}</p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => fetchPage(1, false)}
+              className="bg-primary hover:bg-primary/80 text-white"
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Empty State */}
-        {!loading && filteredItems.length === 0 && (
+        {!loading && !error && filteredItems.length === 0 && (
           <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/10 space-y-3">
             <IconLayers className="w-12 h-12 text-slate-600 mx-auto" />
             <h3 className="text-lg font-bold text-white">No titles available right now</h3>

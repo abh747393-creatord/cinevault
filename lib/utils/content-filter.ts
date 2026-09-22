@@ -156,11 +156,11 @@ export function isLegitimateTitle(
     }
   }
 
-  // 3. Year Sanity Check (filter out unreleased fake concept trailers > 2025)
+  // 3. Year Sanity Check (filter out unreleased fake concept trailers > 2030 or invalid years)
   if (year) {
     const y = typeof year === 'number' ? year : parseInt(year, 10);
     if (!isNaN(y)) {
-      if (y > 2025 || y < 1920) {
+      if (y > 2030 || y < 1900) {
         return false;
       }
     }

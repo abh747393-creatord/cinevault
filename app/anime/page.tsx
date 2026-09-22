@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   IconStars,
@@ -10,6 +10,7 @@ import {
   IconInfoCircle,
   IconLayers,
   IconBolt,
+  IconAlertCircle,
 } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export default function AnimePage() {
   const [searchResults, setSearchResults] = useState<ContentItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const animeCategories = [
     { label: 'All Anime', value: 'all' },
@@ -103,40 +105,48 @@ export default function AnimePage() {
     };
   };
 
-  // Initial load: Fetch top popular anime franchises in parallel
-  useEffect(() => {
-    let isMounted = true;
+  const loadAnime = useCallback(async () => {
     setLoading(true);
+    setError(null);
 
-    Promise.all(
-      TOP_ANIME_QUERIES.map((q) =>
-        movieboxApi.search(q).catch((err) => {
-          console.warn(`[AnimeHub] Search for ${q} failed:`, err);
-          return [] as MovieBoxCatalogItem[];
-        })
-      )
-    )
-      .then((resultsArray) => {
-        if (!isMounted) return;
-        const flattened = resultsArray.flat();
+    try {
+      // 1. Try server-side collection engine
+      const colRes = await fetch('/api/collections/anime?page=1', { cache: 'no-store' }).catch(() => null);
+      if (colRes && colRes.ok) {
+        const colData = await colRes.json();
+        if (colData.items && colData.items.length > 0) {
+          setAnimeList(colData.items);
+          setLoading(false);
+          return;
+        }
+      }
 
-        // Strictly clean out any adult/mockbuster content and deduplicate
-        const cleaned = deduplicateAndCleanCatalog(flattened);
-        const uniqueItems = cleaned.map(mapToContentItem);
+      // 2. Direct provider search across top popular anime franchises
+      const searchPromises = TOP_ANIME_QUERIES.map((q) =>
+        movieboxApi.search(q).catch(() => [] as MovieBoxCatalogItem[])
+      );
+      const resultsArray = await Promise.all(searchPromises);
+      const flattened = resultsArray.flat();
+      const cleaned = deduplicateAndCleanCatalog(flattened);
+      const uniqueItems = cleaned.map(mapToContentItem);
 
+      if (uniqueItems.length > 0) {
         setAnimeList(uniqueItems);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        console.error('[AnimeHub] Failed to fetch initial anime:', err);
-        setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
+      } else {
+        setError('Unable to load anime catalog from the streaming provider.');
+      }
+    } catch (err: any) {
+      console.error('[AnimeHub] Failed to fetch initial anime:', err);
+      setError('Unable to load anime right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadAnime();
+  }, [loadAnime]);
 
   // Live Anime Search
   const handleSearch = async (e: React.FormEvent) => {
@@ -312,6 +322,8 @@ export default function AnimePage() {
           <div className="text-xs text-slate-400 font-medium">
             {searchResults !== null ? (
               <span>Found {searchResults.length} search results</span>
+            ) : loading ? (
+              <span>Connecting to Anime Hub...</span>
             ) : (
               <span>Showing {displayedAnime.length} anime series & movies</span>
             )}
@@ -319,7 +331,7 @@ export default function AnimePage() {
         </div>
 
         {/* Featured Spotlight Card (If available and not actively searching) */}
-        {!searchQuery && selectedCategory === 'all' && featuredAnime && (
+        {!loading && !error && !searchQuery && selectedCategory === 'all' && featuredAnime && (
           <div className="relative rounded-3xl overflow-hidden border border-purple-500/30 bg-gradient-to-br from-purple-950/40 via-card to-background p-6 sm:p-8 flex flex-col md:flex-row gap-6 items-center shadow-2xl">
             <div className="w-full md:w-56 h-80 rounded-2xl overflow-hidden shrink-0 shadow-lg relative bg-black/60">
               <img
@@ -408,8 +420,23 @@ export default function AnimePage() {
           </div>
         )}
 
+        {/* Error State */}
+        {!loading && error && (
+          <div className="py-16 text-center space-y-4 bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-md mx-auto">
+            <p className="text-sm font-medium text-red-400">{error}</p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={loadAnime}
+              className="bg-purple-600 hover:bg-purple-500 text-white"
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Anime Cards Grid */}
-        {!loading && (
+        {!loading && !error && (
           <>
             {displayedAnime.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">

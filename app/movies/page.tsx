@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { IconClapperboardPlay, IconSliderHorizontal, IconClose } from '@/components/ui/icons';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { IconClapperboardPlay, IconSliderHorizontal, IconClose, IconAlertCircle } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { FilterPanel } from '@/components/filters/filter-panel';
 import { SearchBar } from '@/components/search/search-bar';
 import { Button } from '@/components/ui/button';
 import { GENRES } from '@/lib/constants/genres';
 import { ContentFilterOptions, ContentItem } from '@/types/content';
+
+import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
 
 let cachedLiveMovies: ContentItem[] | null = null;
 
@@ -20,50 +22,63 @@ export default function MoviesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveMovies, setLiveMovies] = useState<ContentItem[]>(() => cachedLiveMovies || []);
   const [loading, setLoading] = useState(() => !cachedLiveMovies);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    if (cachedLiveMovies && cachedLiveMovies.length > 0) return;
-
+  const loadMovies = useCallback(async () => {
     setLoading(true);
-    import('@/lib/api/moviebox-client').then(({ movieboxApi }) => {
-      movieboxApi.homepage('movie', 1).then((data) => {
-        if (!isMounted) return;
-        if (data && data.items && data.items.length > 0) {
-          const mapped: ContentItem[] = data.items
-            .filter((it) => it.media_type !== 'series')
-            .map((it) => {
-              const metricRating = data.metrics?.[it.id.value]?.rating;
-              const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
-              return {
-                id: `mb-${it.id.value}`,
-                externalId: it.id.value,
-                title: it.title,
-                slug: `mb-${it.id.value}`,
-                contentType: 'movie',
-                posterUrl: it.poster_url || '/images/neutral-poster.svg',
-                backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
-                description: `${it.title} (${it.year || 'Feature Film'})`,
-                releaseDate: it.year ? `${it.year}-01-01` : '',
-                year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
-                rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
-                genres: [],
-                language: 'English',
-                status: 'released',
-              };
-            });
+    setError(null);
+    try {
+      let data = await movieboxApi.homepage('movie', 1).catch(() => null);
+      if (!data || !data.items || data.items.length === 0) {
+        data = await movieboxApi.homepage('all', 1).catch(() => null);
+      }
+
+      if (data && data.items && data.items.length > 0) {
+        const mapped: ContentItem[] = data.items
+          .filter((it: MovieBoxCatalogItem) => it.media_type !== 'series')
+          .map((it: MovieBoxCatalogItem) => {
+            const metricRating = data?.metrics?.[it.id.value]?.rating;
+            const parsedRating = typeof metricRating === 'number' ? metricRating : undefined;
+            return {
+              id: `mb-${it.id.value}`,
+              externalId: it.id.value,
+              title: it.title,
+              slug: `mb-${it.id.value}`,
+              contentType: 'movie',
+              posterUrl: it.poster_url || '/images/neutral-poster.svg',
+              backdropUrl: it.poster_url || '/images/neutral-backdrop.svg',
+              description: `${it.title} (${it.year || 'Feature Film'})`,
+              releaseDate: it.year ? `${it.year}-01-01` : '',
+              year: it.year ? parseInt(it.year, 10) || 2024 : 2024,
+              rating: typeof parsedRating === 'number' && !isNaN(parsedRating) ? parsedRating : undefined,
+              genres: [],
+              language: 'English',
+              status: 'released',
+            };
+          });
+
+        if (mapped.length > 0) {
           cachedLiveMovies = mapped;
           setLiveMovies(mapped);
+          setError(null);
+        } else {
+          setLiveMovies([]);
         }
-        setLoading(false);
-      }).catch(() => {
-        if (isMounted) setLoading(false);
-      });
-    });
-    return () => {
-      isMounted = false;
-    };
+      } else {
+        setError('Unable to load movies from the streaming provider.');
+      }
+    } catch (err: any) {
+      console.error('[MoviesPage] Failed to fetch movies:', err);
+      setError('Unable to load content right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (cachedLiveMovies && cachedLiveMovies.length > 0) return;
+    loadMovies();
+  }, [loadMovies]);
 
   const filteredMovies = useMemo(() => {
     let list: ContentItem[] = [...liveMovies];
@@ -174,6 +189,20 @@ export default function MoviesPage() {
             <div className="py-24 flex flex-col items-center justify-center space-y-3">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-slate-400 text-xs font-medium">Loading genuine provider catalog...</p>
+            </div>
+          ) : error && liveMovies.length === 0 ? (
+            <div className="py-20 text-center space-y-4 bg-red-950/20 rounded-2xl border border-red-500/20 p-6">
+              <IconAlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+              <h3 className="text-base font-bold text-white">Unable to load movies</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">{error}</p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => loadMovies()}
+                className="text-xs font-semibold px-5"
+              >
+                Retry
+              </Button>
             </div>
           ) : filteredMovies.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
