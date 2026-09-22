@@ -1,12 +1,22 @@
 export const CANONICAL_BACKEND_URL = 'https://desktop-p1cthbu.tailbb54ee.ts.net';
 
-export const RUST_API_BASE = (
-  process.env.NEXT_PUBLIC_RUST_API_URL ||
-  process.env.RUST_API_URL ||
-  process.env.NEXT_PUBLIC_MOVIEBOX_API_URL ||
-  CANONICAL_BACKEND_URL
-).replace(/\/+$/, '');
+function resolveRustApiBase(): string {
+  const candidate =
+    process.env.NEXT_PUBLIC_RUST_API_URL ||
+    process.env.RUST_API_URL ||
+    process.env.NEXT_PUBLIC_MOVIEBOX_API_URL;
 
+  if (candidate) {
+    const trimmed = candidate.trim().replace(/\/+$/, '');
+    // If hosting environment still has the inactive Render domain or localhost, ignore it
+    if (!trimmed.includes('onrender.com') && !trimmed.includes('localhost')) {
+      return trimmed;
+    }
+  }
+  return CANONICAL_BACKEND_URL;
+}
+
+export const RUST_API_BASE = resolveRustApiBase();
 export const MOVIEBOX_API_BASE = `${RUST_API_BASE}/api/v1`;
 
 export interface MovieBoxCatalogItem {
