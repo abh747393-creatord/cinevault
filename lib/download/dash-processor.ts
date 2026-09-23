@@ -31,7 +31,16 @@ export function resolveFfmpegPath(): string | null {
     return process.env.FFMPEG_PATH;
   }
 
-  // 1. Check system PATH via where.exe (Windows) or which (Unix)
+  // 1. Check @ffmpeg-installer/ffmpeg if bundled/installed (e.g. Vercel serverless)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+    if (ffmpegInstaller?.path && fs.existsSync(ffmpegInstaller.path)) {
+      return ffmpegInstaller.path;
+    }
+  } catch {}
+
+  // 2. Check system PATH via where.exe (Windows) or which (Unix)
   try {
     const cmd = process.platform === 'win32' ? 'where.exe ffmpeg' : 'which ffmpeg';
     const out = execSync(cmd, { stdio: ['pipe', 'pipe', 'ignore'] })

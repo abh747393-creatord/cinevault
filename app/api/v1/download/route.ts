@@ -17,6 +17,7 @@ import {
 } from '@/lib/download/dash-processor';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -276,17 +277,6 @@ export async function GET(request: NextRequest) {
         audioTrackId
       );
 
-      const ffmpegPath = resolveFfmpegPath();
-      if (!ffmpegPath) {
-        return NextResponse.json(
-          {
-            error:
-              'FFmpeg is required on the server to multiplex DASH audio and video streams into an MP4 container.',
-          },
-          { status: 503 }
-        );
-      }
-
       // Safe temporary directory for processing
       const tempDir = path.join(
         os.tmpdir(),
@@ -298,6 +288,41 @@ export async function GET(request: NextRequest) {
       const videoTrackPath = path.join(tempDir, 'video-track.mp4');
       const audioTrackPath = path.join(tempDir, 'audio-track.mp4');
       const outputPath = path.join(tempDir, 'output.mp4');
+
+      const ffmpegPath = resolveFfmpegPath();
+      if (!ffmpegPath) {
+        console.warn('[DownloadApi] FFmpeg unavailable in environment. Streaming video track directly.');
+        await downloadTrackSegments({
+          baseUrl,
+          representation: video,
+          outputPath: videoTrackPath,
+          maxSegments,
+          abortSignal: request.signal,
+        });
+
+        const videoStream = fs.createReadStream(videoTrackPath);
+        videoStream.on('close', () => {
+          try {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+          } catch {}
+        });
+
+        const safeFilename = filename.replace(/["\r\n]/g, '_');
+        const headers = new Headers();
+        headers.set('Content-Type', 'video/mp4');
+        headers.set(
+          'Content-Disposition',
+          `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+        );
+        headers.set('Accept-Ranges', 'bytes');
+        const st = fs.statSync(videoTrackPath);
+        headers.set('Content-Length', String(st.size));
+
+        return new NextResponse(videoStream as unknown as ReadableStream, {
+          status: 200,
+          headers,
+        });
+      }
 
       try {
         // Download video and audio tracks concurrently directly to temp files
