@@ -95,7 +95,7 @@ export function DesktopNav() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 w-full transition-all duration-200 select-none hidden md:block',
+        'sticky top-0 z-50 w-full transition-all duration-200 select-none hidden lg:block',
         isHeaderSolid
           ? 'bg-[#07080d]/98 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.8)]'
           : 'bg-gradient-to-b from-[#07080d]/95 via-[#07080d]/70 to-transparent backdrop-blur-sm'

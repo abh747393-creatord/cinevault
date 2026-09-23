@@ -268,7 +268,11 @@ export class MovieBoxApiClient {
   }
 
   async streams(id: string, provider: string = 'moviebox', season: number = 0, episode: number = 0): Promise<MovieBoxRelease[]> {
-    const res = await fetchWithTimeout(`${this.baseUrl}/streams/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}&season=${season}&episode=${episode}`, {}, 8000);
+    const res = await fetchWithTimeout(
+      `${this.baseUrl}/streams/${encodeURIComponent(id)}?provider=${encodeURIComponent(provider)}&season=${season}&episode=${episode}`,
+      { cache: 'no-store' },
+      8000
+    );
     if (!res.ok) throw new Error(`Streams fetch failed: ${res.status}`);
     return res.json();
   }

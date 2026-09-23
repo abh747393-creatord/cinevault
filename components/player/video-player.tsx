@@ -23,6 +23,7 @@ import {
   IconTranslate,
   IconCheck,
   IconHighDefinition,
+  IconDownload,
 } from '@/components/ui/icons';
 import { StreamSource, SubtitleTrack } from '@/types/providers';
 import { ContentItem, Episode } from '@/types/content';
@@ -30,6 +31,12 @@ import { formatSeconds, cn } from '@/lib/utils';
 import { saveWatchProgress } from '@/lib/storage/local-storage-store';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/auth-context';
+import {
+  startDownload,
+  cancelDownload,
+  DownloadProgress,
+  formatDownloadFilename,
+} from '@/lib/download/download-manager';
 
 export interface SubtitleCue {
   id?: string;
@@ -182,6 +189,7 @@ interface VideoPlayerProps {
   content: ContentItem;
   streams: StreamSource[];
   episode?: Episode;
+  seasonNumber?: number;
   initialTime?: number;
   onNextEpisode?: () => void;
   onPrevEpisode?: () => void;
@@ -192,6 +200,7 @@ export function VideoPlayer({
   content,
   streams,
   episode,
+  seasonNumber = 1,
   initialTime = 0,
   onNextEpisode,
   onPrevEpisode,
@@ -420,6 +429,77 @@ export function VideoPlayer({
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [downloadNotification, setDownloadNotification] = useState<string | null>(null);
+
+  const downloadKey = `${content.id}:${episode?.id || 'movie'}`;
+  const isCurrentlyDownloading =
+    downloadProgress?.status === 'downloading' || downloadProgress?.status === 'resolving';
+
+  const handleStartDownload = (qualityOption?: string) => {
+    setShowDownloadMenu(false);
+    setDownloadNotification(`Starting download...`);
+    setTimeout(() => setDownloadNotification(null), 3500);
+
+    const activeSeason =
+      seasonNumber ||
+      (episode?.seasonId ? parseInt(episode.seasonId.replace(/\D/g, ''), 10) || 1 : 1);
+
+    const isMidnightContent =
+      content.genres?.some((g) => g.id === 'g-midnight' || g.slug === 'midnight') ||
+      content.id.toLowerCase().includes('midnight') ||
+      (typeof window !== 'undefined' &&
+        (window.location.pathname.startsWith('/midnight') ||
+          window.location.search.includes('midnight')));
+
+    startDownload({
+      content,
+      episode,
+      seasonNumber: activeSeason,
+      streamIndex: currentStreamIndex,
+      quality: qualityOption,
+      sourceUrl: currentStream?.url,
+      audioTrackId: activeAudioId.startsWith('dash-') ? undefined : activeAudioId,
+      isMidnight: isMidnightContent,
+      onProgress: (p) => {
+        setDownloadProgress(p);
+        if (p.status === 'completed') {
+          setDownloadNotification(`Downloaded ${p.filename}`);
+          setTimeout(() => setDownloadNotification(null), 5000);
+        } else if (p.status === 'error') {
+          setDownloadNotification(p.error || 'Download failed');
+          setTimeout(() => setDownloadNotification(null), 6000);
+        } else if (p.status === 'cancelled') {
+          setDownloadNotification('Download cancelled');
+          setTimeout(() => setDownloadNotification(null), 3000);
+        }
+      },
+    }).catch((err) => {
+      setDownloadNotification(err?.message || 'Download failed');
+      setTimeout(() => setDownloadNotification(null), 5000);
+    });
+  };
+
+  const handleCancelDownload = () => {
+    cancelDownload(downloadKey);
+    setDownloadProgress({
+      status: 'cancelled',
+      progress: 0,
+      downloadedBytes: 0,
+      totalBytes: null,
+      bytesPerSecond: 0,
+      etaSeconds: null,
+      error: 'Download cancelled by user.',
+      filename: null,
+    });
+    setDownloadNotification('Download cancelled');
+    setTimeout(() => {
+      setDownloadNotification(null);
+      setDownloadProgress(null);
+    }, 2500);
+  };
+
   const [activeSubtitle, setActiveSubtitle] = useState<string>('off');
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [activeCueText, setActiveCueText] = useState<string | null>(null);
@@ -447,13 +527,25 @@ export function VideoPlayer({
 
   // Clear auto-hide controls timer while any dropdown menu is actively open
   useEffect(() => {
-    if (showAudioMenu || showSubtitleMenu || showSettingsMenu || showQualityMenu) {
+    if (
+      showAudioMenu ||
+      showSubtitleMenu ||
+      showSettingsMenu ||
+      showQualityMenu ||
+      showDownloadMenu
+    ) {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
         controlsTimeoutRef.current = null;
       }
     }
-  }, [showAudioMenu, showSubtitleMenu, showSettingsMenu, showQualityMenu]);
+  }, [
+    showAudioMenu,
+    showSubtitleMenu,
+    showSettingsMenu,
+    showQualityMenu,
+    showDownloadMenu,
+  ]);
 
   // Fetch and parse subtitle cues whenever activeSubtitle changes or stream changes
   useEffect(() => {
@@ -1718,6 +1810,14 @@ export function VideoPlayer({
               </button>
             )}
 
+            {/* Download Notification Toast */}
+            {downloadNotification && (
+              <div className="absolute top-16 right-4 sm:right-6 px-3.5 py-2 bg-card/95 border border-cyan-500/40 rounded-xl shadow-2xl backdrop-blur-md z-40 text-xs font-semibold text-cyan-300 flex items-center gap-2 animate-fade-in pointer-events-none">
+                <IconDownload className="w-4 h-4 text-cyan-400 flex-shrink-0 animate-bounce" />
+                <span>{downloadNotification}</span>
+              </div>
+            )}
+
             {/* Player Header (Title, Episode) */}
             {!isStreamUnavailable && (
               <div
@@ -1900,6 +2000,7 @@ export function VideoPlayer({
                     setShowSubtitleMenu(false);
                     setShowSettingsMenu(false);
                     setShowQualityMenu(false);
+                    setShowDownloadMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showAudioMenu ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-300 hover:text-white'
@@ -1954,6 +2055,7 @@ export function VideoPlayer({
                     setShowAudioMenu(false);
                     setShowSettingsMenu(false);
                     setShowQualityMenu(false);
+                    setShowDownloadMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showSubtitleMenu || activeSubtitle !== 'off' ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'
@@ -2019,6 +2121,7 @@ export function VideoPlayer({
                     setShowAudioMenu(false);
                     setShowSubtitleMenu(false);
                     setShowSettingsMenu(false);
+                    setShowDownloadMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex items-center gap-1 flex-shrink-0 touch-manipulation ${
                     showQualityMenu || !isAutoQuality
@@ -2136,6 +2239,166 @@ export function VideoPlayer({
                 )}
               </div>
 
+              {/* Download Menu Toggle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDownloadMenu((prev) => !prev);
+                    setShowAudioMenu(false);
+                    setShowSubtitleMenu(false);
+                    setShowSettingsMenu(false);
+                    setShowQualityMenu(false);
+                  }}
+                  className={`p-1.5 sm:p-2 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex items-center gap-1 flex-shrink-0 touch-manipulation ${
+                    showDownloadMenu || isCurrentlyDownloading
+                      ? 'text-cyan-400 bg-cyan-500/15 border border-cyan-500/30'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Download Media"
+                  aria-label="Download Media"
+                >
+                  <IconDownload className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                  {isCurrentlyDownloading && downloadProgress && (
+                    <span className="hidden xs:inline text-[10px] sm:text-[11px] font-bold text-cyan-300 animate-pulse">
+                      {downloadProgress.progress}%
+                    </span>
+                  )}
+                </button>
+
+                {showDownloadMenu && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-11 sm:bottom-12 right-0 w-56 sm:w-64 max-w-[calc(100vw-1.5rem)] max-h-64 sm:max-h-80 overflow-y-auto bg-card/95 backdrop-blur-xl border border-white/10 rounded-xl p-2.5 shadow-2xl space-y-2 z-50 text-xs select-none touch-manipulation"
+                  >
+                    <div className="font-bold text-slate-300 px-1 py-1 border-b border-white/10 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <IconDownload className="w-3.5 h-3.5 text-cyan-400" />
+                        Download Media
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {dashVideoQualities.length > 0 ? 'DASH fMP4' : 'MP4'}
+                      </span>
+                    </div>
+
+                    {isCurrentlyDownloading && downloadProgress ? (
+                      <div className="space-y-2 p-2 bg-white/5 rounded-lg border border-cyan-500/20">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-cyan-300 font-semibold flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                            {downloadProgress.status === 'resolving'
+                              ? 'Resolving...'
+                              : `Downloading ${downloadProgress.progress}%`}
+                          </span>
+                          <span className="text-slate-400">
+                            {downloadProgress.downloadedBytes > 0
+                              ? `${(downloadProgress.downloadedBytes / 1024 / 1024).toFixed(1)} MB`
+                              : ''}
+                            {downloadProgress.totalBytes
+                              ? ` / ${(downloadProgress.totalBytes / 1024 / 1024).toFixed(1)} MB`
+                              : ''}
+                          </span>
+                        </div>
+
+                        <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-cyan-500 h-full transition-all duration-200"
+                            style={{ width: `${downloadProgress.progress}%` }}
+                          />
+                        </div>
+
+                        {downloadProgress.bytesPerSecond > 0 && (
+                          <div className="flex items-center justify-between text-[10px] text-slate-400">
+                            <span>
+                              {(downloadProgress.bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s
+                            </span>
+                            {downloadProgress.etaSeconds !== null && (
+                              <span>ETA {downloadProgress.etaSeconds}s</span>
+                            )}
+                          </div>
+                        )}
+
+                        <Button
+                          variant="accent"
+                          size="sm"
+                          onClick={handleCancelDownload}
+                          className="w-full text-xs h-7 mt-1 bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          Cancel Download
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-slate-400 px-1 py-0.5">
+                          Select quality to save directly to your device:
+                        </div>
+
+                        {/* Genuine DASH representations */}
+                        {dashVideoQualities.length > 0 ? (
+                          dashVideoQualities.map((q) => (
+                            <button
+                              key={q.representationId || q.qualityIndex}
+                              type="button"
+                              onClick={() => handleStartDownload(q.label)}
+                              className="w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between hover:bg-white/10 text-slate-200 cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                                  <IconDownload className="w-3.5 h-3.5" />
+                                  <span>Download {q.label}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {q.width > 0 && q.height > 0 ? `${q.width}×${q.height}` : ''}
+                                  {q.bitrate > 0 ? ` · ${Math.round(q.bitrate / 1000)} kbps` : ''}
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          /* Direct stream qualities */
+                          <button
+                            type="button"
+                            onClick={() => handleStartDownload(currentStream?.quality || 'auto')}
+                            className="w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between hover:bg-white/10 text-slate-200 cursor-pointer"
+                          >
+                            <div>
+                              <div className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                                <IconDownload className="w-3.5 h-3.5" />
+                                <span>Download {currentStream?.quality || 'Available Stream'}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">Direct MP4 format</div>
+                            </div>
+                          </button>
+                        )}
+
+                        {/* Optional subtitle download if legitimate subtitle track exists */}
+                        {allSubtitleTracks.some((t) => t.type === 'vtt' && t.src) && (
+                          <div className="pt-1 border-t border-white/10 mt-1">
+                            <div className="text-[10px] text-slate-400 px-1 pb-1">Subtitles:</div>
+                            {allSubtitleTracks
+                              .filter((t) => t.type === 'vtt' && t.src)
+                              .map((t) => (
+                                <a
+                                  key={t.id}
+                                  href={t.src}
+                                  download={`${formatDownloadFilename(content, episode, seasonNumber).replace(/\.mp4$/, '')}.${t.language}.vtt`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between hover:bg-white/10 text-slate-300 text-[11px]"
+                                >
+                                  <span>Download {t.label} (.vtt)</span>
+                                  <IconSubtitle className="w-3.5 h-3.5 text-primary" />
+                                </a>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Settings Menu Toggle (Speed, Quality) */}
               <div className="relative">
                 <button
@@ -2146,6 +2409,7 @@ export function VideoPlayer({
                     setShowSubtitleMenu(false);
                     setShowAudioMenu(false);
                     setShowQualityMenu(false);
+                    setShowDownloadMenu(false);
                   }}
                   className={`p-1.5 sm:p-2 text-slate-300 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none flex-shrink-0 touch-manipulation ${
                     showSettingsMenu ? 'text-primary bg-primary/10' : 'text-slate-300 hover:text-white'

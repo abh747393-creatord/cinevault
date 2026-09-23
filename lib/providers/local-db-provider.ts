@@ -125,7 +125,7 @@ export class LocalDbProvider implements ContentProvider {
   }
 
   async getStreams(contentId: string, episodeId?: string): Promise<StreamSource[]> {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured || contentId.startsWith('mb-')) {
       return [];
     }
 

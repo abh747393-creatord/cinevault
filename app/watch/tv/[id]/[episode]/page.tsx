@@ -59,7 +59,7 @@ function WatchTvContent({
     setError(null);
 
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), 8000)
+      setTimeout(() => reject(new Error('Request timed out')), 15000)
     );
 
     try {
@@ -348,6 +348,7 @@ function WatchTvContent({
           content={show}
           streams={streams}
           episode={currentEpisode}
+          seasonNumber={selectedSeasonNumber || activeSeason?.seasonNumber || 1}
           initialTime={initialTime}
           onNextEpisode={nextEpisode ? handleNext : undefined}
           onPrevEpisode={prevEpisode ? handlePrev : undefined}

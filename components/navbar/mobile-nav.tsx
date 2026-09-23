@@ -23,7 +23,7 @@ export function MobileHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full md:hidden bg-background/90 backdrop-blur-xl border-b border-white/10 flex flex-col">
+    <header className="sticky top-0 z-40 w-full lg:hidden bg-background/90 backdrop-blur-xl border-b border-white/10 flex flex-col">
       <div className="px-4 h-14 flex items-center justify-between">
         <Link href="/" prefetch={true} className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-accent flex items-center justify-center">
@@ -136,7 +136,7 @@ export function MobileBottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-background/95 backdrop-blur-xl border-t border-white/10 px-2 py-1.5 flex items-center justify-around select-none">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-xl border-t border-white/10 px-2 py-1.5 flex items-center justify-around select-none">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive =
