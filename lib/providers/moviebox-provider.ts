@@ -285,9 +285,17 @@ export class MovieBoxProvider implements ContentProvider {
           const isDash = mirror.proxy_url?.includes('.mpd') || mirror.proxy_url?.includes('/manifest.mpd') || mirror.proxy_url?.includes('/dash/') || mirror.resolver_url?.includes('.mpd');
           const cleanLabel = isDash ? 'Multi-Res' : (q || mirror.label);
 
+          let streamUrl = mirror.proxy_url || mirror.resolver_url;
+          if (streamUrl) {
+            const proxyIdx = streamUrl.indexOf('/api/v1/stream/proxy/');
+            if (proxyIdx !== -1) {
+              streamUrl = streamUrl.substring(proxyIdx);
+            }
+          }
+
           streamSources.push({
             id: `mb-stream-${rel.filename}-${mirror.label}`,
-            url: mirror.proxy_url || mirror.resolver_url,
+            url: streamUrl,
             quality: q,
             format: 'mp4',
             providerId: this.id,

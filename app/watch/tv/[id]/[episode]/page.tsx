@@ -48,6 +48,7 @@ function WatchTvContent({
   const [loadingShow, setLoadingShow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streams, setStreams] = useState<StreamSource[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState<boolean>(true);
   const [initialTime, setInitialTime] = useState<number>(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [showShare, setShowShare] = useState<boolean>(false);
@@ -59,7 +60,7 @@ function WatchTvContent({
     setError(null);
 
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), 15000)
+      setTimeout(() => reject(new Error('Request timed out')), 10000)
     );
 
     try {
@@ -171,9 +172,23 @@ function WatchTvContent({
   useEffect(() => {
     if (!show || !currentEpisode) return;
 
-    providerResolver.resolveStreams(show.id, currentEpisode.id).then((resolved) => {
-      setStreams(resolved);
-    });
+    let isCancelled = false;
+    setLoadingStreams(true);
+    providerResolver
+      .resolveStreams(show.id, currentEpisode.id)
+      .then((resolved) => {
+        if (!isCancelled) {
+          setStreams(resolved || []);
+          setLoadingStreams(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[WatchTvPage] Failed to resolve streams:', err);
+        if (!isCancelled) {
+          setStreams([]);
+          setLoadingStreams(false);
+        }
+      });
 
     if (timeParam) {
       setInitialTime(parseInt(timeParam, 10));
@@ -186,6 +201,10 @@ function WatchTvContent({
         setInitialTime(match.positionSeconds);
       }
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [show?.id, currentEpisode?.id, timeParam]);
 
   if (loadingShow) {
@@ -347,6 +366,7 @@ function WatchTvContent({
         <VideoPlayer
           content={show}
           streams={streams}
+          isLoadingStreams={loadingStreams}
           episode={currentEpisode}
           seasonNumber={selectedSeasonNumber || activeSeason?.seasonNumber || 1}
           initialTime={initialTime}

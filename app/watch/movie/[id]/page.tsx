@@ -32,11 +32,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
 
   const [movie, setMovie] = useState<ContentItem | null>(null);
   const [loadingMovie, setLoadingMovie] = useState(true);
-  const [streams, setStreams] = useState<StreamSource[]>([]);
-  const [initialTime, setInitialTime] = useState<number>(0);
-  const [inList, setInList] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const [related, setRelated] = useState<ContentItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -93,14 +89,34 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
     };
   }, [params.id]);
 
+  const [streams, setStreams] = useState<StreamSource[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState<boolean>(true);
+  const [initialTime, setInitialTime] = useState<number>(0);
+  const [inList, setInList] = useState<boolean>(false);
+  const [related, setRelated] = useState<ContentItem[]>([]);
+
   useEffect(() => {
     if (!movie) return;
     setInList(isInWatchlist(movie.id));
 
+    let isCancelled = false;
+    setLoadingStreams(true);
     // Resolve streams from provider system
-    providerResolver.resolveStreams(movie.id).then((resolved) => {
-      setStreams(resolved);
-    });
+    providerResolver
+      .resolveStreams(movie.id)
+      .then((resolved) => {
+        if (!isCancelled) {
+          setStreams(resolved || []);
+          setLoadingStreams(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[WatchMoviePage] Stream resolution failed:', err);
+        if (!isCancelled) {
+          setStreams([]);
+          setLoadingStreams(false);
+        }
+      });
 
     // Check query param or history for initial resume position
     if (timeParam) {
@@ -112,6 +128,10 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
         setInitialTime(match.positionSeconds);
       }
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [movie, timeParam]);
 
   if (loadingMovie) {
@@ -179,6 +199,7 @@ function WatchMovieContent({ params }: { params: { id: string } }) {
         <VideoPlayer
           content={movie}
           streams={streams}
+          isLoadingStreams={loadingStreams}
           initialTime={initialTime}
         />
       </div>

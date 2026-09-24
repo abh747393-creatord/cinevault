@@ -194,11 +194,13 @@ interface VideoPlayerProps {
   onNextEpisode?: () => void;
   onPrevEpisode?: () => void;
   onToggleEpisodeDrawer?: () => void;
+  isLoadingStreams?: boolean;
 }
 
 export function VideoPlayer({
   content,
   streams,
+  isLoadingStreams = false,
   episode,
   seasonNumber = 1,
   initialTime = 0,
@@ -274,14 +276,20 @@ export function VideoPlayer({
     );
   }, [activeStreams, currentStreamIndex]);
 
+  // Stream is in active resolution state if streams are still loading or array is empty without an error
+  const isResolvingStreams =
+    isLoadingStreams ||
+    (!hasError && playMode === 'stream' && streams.length === 0 && (!activeStreams || activeStreams.length === 0));
+
   // Unified stream error/unavailable state (handles both network/playback errors and missing stream URLs)
   const isStreamUnavailable = useMemo(() => {
     if (playMode !== 'stream') return false;
+    if (isResolvingStreams) return false;
     if (hasError) return true;
     if (!activeStreams || activeStreams.length === 0) return true;
     if (!currentStream || !currentStream.url || currentStream.url.trim().length === 0) return true;
     return false;
-  }, [playMode, hasError, activeStreams, currentStream]);
+  }, [playMode, hasError, activeStreams, currentStream, isResolvingStreams]);
 
   // DASH in-manifest tracks discovered directly from MediaPlayer
   const [dashAudioTracks, setDashAudioTracks] = useState<any[]>([]);
@@ -783,10 +791,14 @@ export function VideoPlayer({
       : 'HD';
   }, [dashVideoQualities, isAutoQuality, activeQualityLabel, currentQualityIndex, currentRepresentationId, currentStream]);
 
+  // Session tracking to ensure late async resolution/error events cannot overwrite newer sources
+  const playSessionIdRef = useRef(0);
+
   // Initialize dash.js for MPEG-DASH streams or native HTML5 for direct files
   useEffect(() => {
     if (playMode !== 'stream' || !currentStream?.url || !videoRef.current) return;
 
+    const currentSessionId = ++playSessionIdRef.current;
     const videoElement = videoRef.current;
     const streamUrl = currentStream.url;
     const isDash =
@@ -808,10 +820,17 @@ export function VideoPlayer({
     setIsLoading(true);
     setHasError(false);
 
+    // Watchdog timer: bounded resolution (fail over to next mirror or report within 10s)
+    const resolutionWatchdog = setTimeout(() => {
+      if (isCancelled || playSessionIdRef.current !== currentSessionId) return;
+      console.warn('[Player] Bounded resolution watchdog triggered (10s) for stream:', streamUrl);
+      handleVideoError(currentSessionId);
+    }, 10000);
+
     if (isDash) {
       import('dashjs')
         .then((dashModule) => {
-          if (isCancelled || !videoRef.current) return;
+          if (isCancelled || playSessionIdRef.current !== currentSessionId || !videoRef.current) return;
 
           const dashjs: any = (dashModule as any).default || dashModule;
           const player = dashjs.MediaPlayer().create();
@@ -821,8 +840,6 @@ export function VideoPlayer({
               logLevel: 0, // LOG_LEVEL_NONE (completely eliminates console log memory leak)
             },
             streaming: {
-              lowLatencyEnabled: false,
-              fastSwitchEnabled: false, // Disabling fast switch prevents media eviction near playhead that causes 1-second micro-stalls
               buffer: {
                 bufferPruningInterval: 30, // Prune only every 30s to eliminate MSE thread remove/append lock contention
                 bufferToKeep: 30, // Keep 30s behind playback for smooth backward scrubbing
@@ -842,12 +859,10 @@ export function VideoPlayer({
                 threshold: 0.3,
               },
               retryAttempts: {
-                MPD: 3,
-                XLink: 3,
-                InitializationSegment: 3,
-                IndexSegment: 3,
-                MediaSegment: 3,
-                BitrateSegment: 3,
+                MPD: 1, // Fail fast: do not spin for 15s if manifest fails
+                InitializationSegment: 1,
+                IndexSegment: 1,
+                MediaSegment: 2,
               },
               abr: {
                 autoSwitchBitrate: {
@@ -855,11 +870,9 @@ export function VideoPlayer({
                   audio: true,
                 },
                 limitBitrateByPortal: false, // DO NOT cap representation by element DOM width!
-                useDefaultABRRules: true,
                 initialBitrate: {
                   video: -1, // Dynamic ABR start: prevents forced 1080p startup buffering stalls
                 },
-                bandwidthSafetyFactor: 0.85, // 15% headroom prevents oscillation between 720p and 1080p
               },
             },
           });
@@ -949,19 +962,24 @@ export function VideoPlayer({
           };
 
           player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
+            if (isCancelled || playSessionIdRef.current !== currentSessionId) return;
+            clearTimeout(resolutionWatchdog);
             console.warn('[DASH ABR] Error event:', e);
-            handleVideoError();
+            handleVideoError(currentSessionId);
           });
 
           player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+            if (isCancelled || playSessionIdRef.current !== currentSessionId) return;
             // Verify MSE could mount a supported video track
             try {
               const videoTracks = player.getTracksFor('video');
               if (videoTracks && videoTracks.length === 0) {
                 console.warn('[Dash.js] No supported video track found in MSE! Falling back to direct MP4...');
-                handleVideoError();
+                handleVideoError(currentSessionId);
+                return;
               }
             } catch {}
+            clearTimeout(resolutionWatchdog);
             updateTracksFromPlayer();
             updateQualitiesFromPlayer();
 
@@ -973,6 +991,8 @@ export function VideoPlayer({
           });
 
           player.on(dashjs.MediaPlayer.events.CAN_PLAY, () => {
+            if (isCancelled || playSessionIdRef.current !== currentSessionId) return;
+            clearTimeout(resolutionWatchdog);
             setIsLoading(false);
             setHasError(false);
             updateTracksFromPlayer();
@@ -1348,7 +1368,11 @@ export function VideoPlayer({
     setShowSettingsMenu(false);
   };
 
-  const handleVideoError = () => {
+  const handleVideoError = (sessionId?: number) => {
+    if (sessionId !== undefined && playSessionIdRef.current !== sessionId) {
+      // Stale callback from previous stream session - ignore!
+      return;
+    }
     const video = videoRef.current;
     const savedTime = video?.currentTime || currentTime || 0;
     const wasPlaying = !video?.paused;
@@ -1668,7 +1692,7 @@ export function VideoPlayer({
                 <div className="space-y-1 max-w-md">
                   <h3 className="text-base sm:text-xl font-bold text-white">Stream Temporarily Unavailable</h3>
                   <p className="text-xs sm:text-sm text-slate-400">
-                    The requested stream could not be loaded from this provider.
+                    Unable to start this source. Try another source or retry.
                   </p>
                 </div>
 
@@ -1755,7 +1779,7 @@ export function VideoPlayer({
                 onWaiting={() => setIsLoading(true)}
                 onPlaying={handleVideoPlaying}
                 onPause={handleVideoPause}
-                onError={handleVideoError}
+                onError={() => handleVideoError()}
                 playsInline
               >
                 {currentStream.subtitles?.map((sub: SubtitleTrack) => (
@@ -1771,8 +1795,18 @@ export function VideoPlayer({
               </video>
             ) : null}
 
+            {/* Resolving Streams Overlay */}
+            {isResolvingStreams && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm z-20 space-y-3">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs sm:text-sm font-semibold text-slate-300 animate-pulse">
+                  Resolving provider stream...
+                </p>
+              </div>
+            )}
+
             {/* Loading Spinner */}
-            {isLoading && !isStreamUnavailable && (
+            {isLoading && !isStreamUnavailable && !isResolvingStreams && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
                 <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
