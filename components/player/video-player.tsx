@@ -301,6 +301,7 @@ export function VideoPlayer({
   const [activeQualityLabel, setActiveQualityLabel] = useState<string>('Auto');
   const [isAutoQuality, setIsAutoQuality] = useState<boolean>(true);
   const [showQualityMenu, setShowQualityMenu] = useState<boolean>(false);
+  const [hasUnsupportedVideoCodec, setHasUnsupportedVideoCodec] = useState<boolean>(false);
 
   // Unified Audio Tracks (DASH adaptation sets + Stream metadata + Provider dubs)
   const allAudioTracks = useMemo<UnifiedAudioTrack[]>(() => {
@@ -819,6 +820,7 @@ export function VideoPlayer({
 
     setIsLoading(true);
     setHasError(false);
+    setHasUnsupportedVideoCodec(false);
 
     // Watchdog timer: bounded resolution (fail over to next mirror or report within 10s)
     const resolutionWatchdog = setTimeout(() => {
@@ -973,10 +975,24 @@ export function VideoPlayer({
             // Verify MSE could mount a supported video track
             try {
               const videoTracks = player.getTracksFor('video');
+              const audioTracks = player.getTracksFor('audio');
               if (videoTracks && videoTracks.length === 0) {
-                console.warn('[Dash.js] No supported video track found in MSE! Falling back to direct MP4...');
-                handleVideoError(currentSessionId);
-                return;
+                if (audioTracks && audioTracks.length > 0) {
+                  console.info('[Dash.js] Video codec (HEVC/H.265) not supported by browser MSE. Audio track active.');
+                  setHasUnsupportedVideoCodec(true);
+                  clearTimeout(resolutionWatchdog);
+                  setIsLoading(false);
+                  setHasError(false);
+                  updateTracksFromPlayer();
+                  if (videoElement && videoElement.paused) {
+                    videoElement.play().catch(() => {});
+                  }
+                  return;
+                } else {
+                  console.warn('[Dash.js] No supported video or audio tracks found in MSE!');
+                  handleVideoError(currentSessionId);
+                  return;
+                }
               }
             } catch {}
             clearTimeout(resolutionWatchdog);
@@ -997,6 +1013,9 @@ export function VideoPlayer({
             setHasError(false);
             updateTracksFromPlayer();
             updateQualitiesFromPlayer();
+            if (videoElement && videoElement.paused) {
+              videoElement.play().catch(() => {});
+            }
           });
 
           player.on(dashjs.MediaPlayer.events.PERIOD_SWITCH_COMPLETED, () => {
@@ -1045,6 +1064,7 @@ export function VideoPlayer({
           });
 
           player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, (e: any) => {
+            clearTimeout(resolutionWatchdog);
             if (e && e.mediaType === 'video') {
               try {
                 const throughput = typeof player.getAverageThroughput === 'function' ? player.getAverageThroughput('video') : null;
@@ -1062,6 +1082,7 @@ export function VideoPlayer({
           });
 
           player.on(dashjs.MediaPlayer.events.BUFFER_LOADED, (e: any) => {
+            clearTimeout(resolutionWatchdog);
             const buf = typeof player.getBufferLength === 'function' ? player.getBufferLength(e?.mediaType || 'video') : null;
             console.debug(`[DASH ABR] BUFFER_LOADED on ${e?.mediaType || 'media'}, bufferAhead: ${typeof buf === 'number' ? buf.toFixed(2) + 's' : 'N/A'}`);
           });
@@ -1138,6 +1159,7 @@ export function VideoPlayer({
       setCurrentQualityIndex(-1);
       setIsAutoQuality(true);
       setActiveQualityLabel('Auto');
+      setHasUnsupportedVideoCodec(false);
       if (dashPlayerRef.current) {
         try {
           dashPlayerRef.current.reset();
@@ -1401,7 +1423,7 @@ export function VideoPlayer({
 
   // Black screen detection: auto-switch to direct MP4 if audio plays but videoWidth remains 0
   useEffect(() => {
-    if (playMode !== 'stream' || hasError || isLoading) return;
+    if (playMode !== 'stream' || hasError || isLoading || hasUnsupportedVideoCodec) return;
 
     const interval = setInterval(() => {
       const video = videoRef.current;
@@ -1673,6 +1695,19 @@ export function VideoPlayer({
           </div>
         )}
 
+        {/* Unsupported Video Codec / Audio-Only Playback Banner */}
+        {hasUnsupportedVideoCodec && (
+          <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-4 max-w-sm bg-black/85 backdrop-blur-md border border-amber-500/40 rounded-xl p-3 shadow-2xl z-30 flex items-start gap-2.5 text-left pointer-events-auto">
+            <span className="w-2 h-2 rounded-full bg-amber-400 mt-1 flex-shrink-0 animate-pulse" />
+            <div className="text-xs">
+              <div className="font-semibold text-amber-200">Audio Playback Active</div>
+              <div className="text-slate-300 text-[11px] mt-0.5 leading-relaxed">
+                Video track is encoded in HEVC/H.265. To view video on Windows, install the Microsoft HEVC Video Extension or use a browser with hardware HEVC support.
+              </div>
+            </div>
+          </div>
+        )}
+
         {playMode === 'trailer' && content.youtubeId ? (
           <div className="w-full h-full relative bg-black">
             <iframe
@@ -1794,6 +1829,33 @@ export function VideoPlayer({
                 ))}
               </video>
             ) : null}
+
+            {/* Audio-only background artwork when video track is unsupported HEVC */}
+            {hasUnsupportedVideoCodec && (
+              <div className="absolute inset-0 pointer-events-none z-10 flex flex-col items-center justify-center overflow-hidden">
+                {content.backdropUrl || content.posterUrl ? (
+                  <img
+                    src={content.backdropUrl || content.posterUrl}
+                    alt={content.title}
+                    className="absolute inset-0 w-full h-full object-cover blur-md opacity-25 scale-105"
+                  />
+                ) : null}
+                <div className="relative z-10 flex flex-col items-center gap-3 p-6 text-center">
+                  <div className="w-16 h-16 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shadow-lg">
+                    <IconVolumeHigh className="w-8 h-8 text-primary animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-white">
+                      {content.title} {episode ? `• S${seasonNumber}:E${episode.episodeNumber} ${episode.title}` : ''}
+                    </div>
+                    <div className="text-xs text-emerald-400 font-medium flex items-center justify-center gap-1.5 mt-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      High-Fidelity Audio Stream Active
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Resolving Streams Overlay */}
             {isResolvingStreams && (

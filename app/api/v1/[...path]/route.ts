@@ -73,6 +73,9 @@ async function handleProxy(
         );
       }
 
+      // Normalize HEVC FourCC from hev1 to hvc1 so Chromium browsers with hardware HEVC can decode
+      rewrittenXml = rewrittenXml.replace(/codecs="hev1/g, 'codecs="hvc1');
+
       const headers = new Headers();
       for (const [k, v] of Object.entries(CORS_HEADERS)) {
         headers.set(k, v);
