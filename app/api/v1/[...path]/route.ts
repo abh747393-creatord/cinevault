@@ -143,14 +143,14 @@ async function handleProxy(
     console.error(`[ApiV1Proxy] Failed to fetch ${targetUrl}:`, err?.message || err);
     return NextResponse.json(
       {
-        error: isAborted
-          ? 'Upstream request timed out'
-          : 'Unable to connect to streaming backend',
+        error: 'Backend Service Unavailable',
+        status: 503,
+        diagnostic: isAborted
+          ? 'The CineVault streaming backend timed out while fulfilling the request.'
+          : 'The CineVault streaming backend is currently offline or unreachable. Please verify that the backend daemon and network tunnel are active.',
         details: String(err?.message || err),
-        targetUrl,
-        aborted: controller.signal.aborted,
       },
-      { status: 504, headers: CORS_HEADERS }
+      { status: 503, headers: CORS_HEADERS }
     );
   }
 }

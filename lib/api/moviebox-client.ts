@@ -1,6 +1,8 @@
 export const CANONICAL_BACKEND_URL = 'https://desktop-p1cthbu.tailbb54ee.ts.net';
 
-function resolveRustApiBase(): string {
+export function resolveRustApiBase(): string {
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+  const isDev = process.env.NODE_ENV === 'development' && !isVercel;
   const candidate =
     process.env.NEXT_PUBLIC_RUST_API_URL ||
     process.env.RUST_API_URL ||
@@ -8,11 +10,23 @@ function resolveRustApiBase(): string {
 
   if (candidate) {
     const trimmed = candidate.trim().replace(/\/+$/, '');
-    // If hosting environment still has the inactive Render domain or localhost, ignore it
-    if (!trimmed.includes('onrender.com') && !trimmed.includes('localhost')) {
-      return trimmed;
+    if (!trimmed.includes('onrender.com')) {
+      if (trimmed.includes('localhost') || trimmed.includes('127.0.0.1')) {
+        // Localhost only allowed in explicit local development mode (never on Vercel)
+        if (isDev) {
+          return trimmed;
+        }
+      } else {
+        return trimmed;
+      }
     }
   }
+
+  // Local development fallback if explicitly enabled on local developer machine
+  if (isDev && process.env.USE_LOCAL_BACKEND === 'true') {
+    return 'http://127.0.0.1:8080';
+  }
+
   return CANONICAL_BACKEND_URL;
 }
 

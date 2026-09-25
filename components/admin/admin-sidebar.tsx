@@ -18,6 +18,7 @@ import {
   IconShield,
   IconTV,
   IconStars,
+  IconRefresh,
 } from '@/components/ui/icons';
 
 interface AdminSidebarProps {
@@ -59,6 +60,11 @@ const navItems: NavItem[] = [
     name: 'Streaming Providers',
     href: '/admin/providers',
     icon: IconServer,
+  },
+  {
+    name: 'System Updates',
+    href: '/admin/updates',
+    icon: IconRefresh,
   },
   {
     name: 'Watch History',

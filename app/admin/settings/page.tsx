@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   IconSettings,
   IconStars,
@@ -16,6 +17,8 @@ import {
   IconEye,
   IconEyeSlash,
   IconShieldTick,
+  IconArrowRightUp,
+  IconServer,
 } from '@/components/ui/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -301,8 +304,29 @@ export default function AdminSettingsPage() {
 
       {/* TAB 1: GENERAL */}
       {activeTab === 'general' && (
-        <form onSubmit={handleSaveGeneral} className="p-6 rounded-2xl bg-card border border-white/10 space-y-5 max-w-2xl">
-          <div className="space-y-1">
+        <div className="space-y-6 max-w-2xl">
+          {/* MovieBox Engine & Updates Shortcut Card */}
+          <div className="p-5 rounded-2xl bg-card border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <IconServer className="w-4 h-4 text-primary" />
+                <span className="text-sm font-bold text-white">MovieBox-TUI Engine & Updates</span>
+                <Badge variant="accent" size="sm" className="text-[10px]">Rust Backend</Badge>
+              </div>
+              <p className="text-xs text-slate-400">
+                Inspect installed versions, upstream GitHub releases, and trigger verified, safe updates.
+              </p>
+            </div>
+            <Link href="/admin/updates">
+              <Button variant="glass" size="sm" className="text-xs font-bold gap-1.5 shrink-0">
+                Manage Updates
+                <IconArrowRightUp className="w-3.5 h-3.5" />
+              </Button>
+            </Link>
+          </div>
+
+          <form onSubmit={handleSaveGeneral} className="p-6 rounded-2xl bg-card border border-white/10 space-y-5">
+            <div className="space-y-1">
             <h3 className="text-sm font-bold text-white">Branding & Playback Defaults</h3>
             <p className="text-xs text-slate-400">Global settings applied across customer facing views.</p>
           </div>
@@ -357,7 +381,8 @@ export default function AdminSettingsPage() {
             </Button>
           </div>
         </form>
-      )}
+      </div>
+    )}
 
       {/* TAB 2: HERO SLIDES */}
       {activeTab === 'hero' && (
