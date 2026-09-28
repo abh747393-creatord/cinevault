@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,12 +19,15 @@ import {
   IconBolt,
   IconInfoCircle,
   IconRefresh,
+  IconFilter,
+  IconSort,
+  IconChevronDown,
+  IconClose,
 } from '@/components/ui/icons';
 import { ContentCard } from '@/components/cards/content-card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ContentItem } from '@/types/content';
-import { movieboxApi, MovieBoxCatalogItem } from '@/lib/api/moviebox-client';
+import { movieboxApi } from '@/lib/api/moviebox-client';
 import { getCanonicalTitle } from '@/lib/utils/content-filter';
 
 interface AuthStatus {
@@ -37,7 +40,7 @@ interface AuthStatus {
 export default function MidnightPage() {
   const router = useRouter();
 
-  // Auth & Access Gate State
+  // 1. Auth & Access Gate State
   const [authStatus, setAuthStatus] = useState<AuthStatus>({
     loading: true,
     enabled: true,
@@ -51,20 +54,39 @@ export default function MidnightPage() {
   const [submittingDisclaimer, setSubmittingDisclaimer] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Content Catalog State
+  // 2. Content & Pagination State
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [midnightList, setMidnightList] = useState<ContentItem[]>([]);
-  const [searchResults, setSearchResults] = useState<ContentItem[] | null>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
-  const [searching, setSearching] = useState(false);
+  const [items, setItems] = useState<ContentItem[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingContent, setLoadingContent] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [totalAvailable, setTotalAvailable] = useState<number | null>(null);
 
+  // 3. Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [langFilter, setLangFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [sortFilter, setSortFilter] = useState('default');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Sentinel ref for infinite scroll & concurrency lock
+  const observerTarget = useRef<HTMLDivElement | null>(null);
+  const isFetchingRef = useRef(false);
+
+  // Category definitions (8 categories as required)
   const midnightCategories = [
     { label: '🌙 All Midnight', value: 'all' },
     { label: '🎬 Midnight Movies', value: 'movies' },
     { label: '📺 Midnight Series', value: 'series' },
-    { label: '🎙️ Dubbed & Hindi', value: 'dubbed' },
+    { label: '🔥 Erotic Movies', value: 'erotic' },
+    { label: '🔞 Adult Anime / Hentai', value: 'anime' },
+    { label: '🎙️ Hindi Dubbed', value: 'dubbed' },
+    { label: '⚡ Recently Added', value: 'recent' },
+    { label: '⭐ Popular', value: 'popular' },
   ];
 
   // Map raw MovieBox catalog items into CineVault ContentItem objects
@@ -73,7 +95,10 @@ export default function MidnightPage() {
     const isSeries =
       it.media_type === 'series' ||
       it.type === 'series' ||
-      (it.media_type !== 'movie' && it.type !== 'movie' && typeof it.season_count === 'number' && it.season_count > 0);
+      (it.media_type !== 'movie' &&
+        it.type !== 'movie' &&
+        typeof it.season_count === 'number' &&
+        it.season_count > 0);
     const rawTitle = it.title || it.name || 'Untitled';
     const titleLower = rawTitle.toLowerCase();
     const hasHindi =
@@ -86,7 +111,11 @@ export default function MidnightPage() {
 
     const genres = [
       { id: 'g-midnight', name: 'Midnight', slug: 'midnight' },
-      { id: isSeries ? 'g-tv' : 'g-movie', name: isSeries ? 'TV Series' : 'Movie', slug: isSeries ? 'tv' : 'movie' },
+      {
+        id: isSeries ? 'g-tv' : 'g-movie',
+        name: isSeries ? 'TV Series' : 'Movie',
+        slug: isSeries ? 'tv' : 'movie',
+      },
     ];
 
     const availableAudio = hasHindi
@@ -114,7 +143,7 @@ export default function MidnightPage() {
     };
   }, []);
 
-  // 1. Check current Midnight access status
+  // Check current Midnight access status
   const checkStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/midnight/status', { cache: 'no-store' });
@@ -148,69 +177,154 @@ export default function MidnightPage() {
     checkStatus();
   }, [checkStatus]);
 
-  // 2. Fetch genuine upstream Midnight content once authenticated AND disclaimer accepted
-  const loadContent = useCallback(async () => {
-    setLoadingContent(true);
-    setContentError(null);
-    try {
-      const res = await fetch('/api/midnight/content?page=1', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        const rawItems = data?.items || [];
-        const seenIds = new Set<string>();
-        const uniqueItems: ContentItem[] = [];
+  // Fetch page of content
+  const fetchPage = useCallback(
+    async (
+      pageNum: number,
+      cat: string,
+      q: string,
+      filters: { type: string; language: string; year: string; sort: string },
+      append: boolean = false
+    ) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
 
-        for (const item of rawItems) {
-          const idVal = item.id?.value || (typeof item.id === 'string' ? item.id : item.subjectId);
-          if (!idVal || seenIds.has(String(idVal))) continue;
-          seenIds.add(String(idVal));
-          uniqueItems.push(mapToContentItem(item));
-        }
-
-        setMidnightList(uniqueItems);
-      } else if (res.status === 401 || res.status === 403) {
-        // Session expired or disabled
-        checkStatus();
+      if (pageNum === 1) {
+        setLoadingContent(true);
+        setContentError(null);
       } else {
-        // Upstream provider temporarily unreachable from serverless container;
-        // fallback to direct client-side provider fetch since session is verified
-        try {
-          const data = await movieboxApi.homepage('9', 1);
-          const rawItems = data?.items || [];
-          const seenIds = new Set<string>();
-          const uniqueItems: ContentItem[] = [];
-
-          for (const item of rawItems) {
-            const raw = item as any;
-            const idVal = raw.id?.value || (typeof raw.id === 'string' ? raw.id : raw.subjectId);
-            if (!idVal || seenIds.has(String(idVal))) continue;
-            seenIds.add(String(idVal));
-            uniqueItems.push(mapToContentItem(raw));
-          }
-
-          if (uniqueItems.length > 0) {
-            setMidnightList(uniqueItems);
-          } else {
-            setContentError('No Midnight titles currently available from the provider feed.');
-          }
-        } catch (clientErr) {
-          console.error('Client fallback also failed:', clientErr);
-          setContentError('Failed to connect to the Midnight provider feed. Please try again.');
-        }
+        setLoadingMore(true);
       }
-    } catch (err) {
-      console.error('Failed to load Midnight content:', err);
-      setContentError('Failed to load Midnight content. Please check your connection and try again.');
-    } finally {
-      setLoadingContent(false);
-    }
-  }, [checkStatus, mapToContentItem]);
 
+      try {
+        const params = new URLSearchParams({
+          category: cat,
+          page: String(pageNum),
+          limit: '24',
+          type: filters.type,
+          language: filters.language,
+          year: filters.year,
+          sort: filters.sort,
+        });
+        if (q.trim()) {
+          params.set('q', q.trim());
+        }
+
+        const res = await fetch(`/api/midnight/content?${params.toString()}`, {
+          cache: 'no-store',
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const rawItems = data?.items || [];
+          const newItems = rawItems.map(mapToContentItem);
+
+          setHasMore(Boolean(data?.hasMore));
+          setTotalAvailable(typeof data?.totalAvailable === 'number' ? data.totalAvailable : null);
+          setPage(pageNum);
+
+          setItems((prev) => {
+            if (!append) return newItems;
+            const seen = new Set(prev.map((i) => i.id));
+            const additions = newItems.filter((i: ContentItem) => !seen.has(i.id));
+            return [...prev, ...additions];
+          });
+        } else if (res.status === 401 || res.status === 403) {
+          checkStatus();
+        } else {
+          // Fallback to client-side provider fetch if server route fails
+          try {
+            const clientRes = await movieboxApi.homepage('9', pageNum);
+            const rawItems = clientRes?.items || [];
+            const newItems = rawItems.map(mapToContentItem);
+            setItems((prev) => (append ? [...prev, ...newItems] : newItems));
+            setHasMore(false);
+          } catch {
+            setContentError('Failed to load Midnight catalog from provider.');
+          }
+        }
+      } catch (err) {
+        console.error('Midnight fetch error:', err);
+        setContentError('Failed to load content. Please check your connection.');
+      } finally {
+        isFetchingRef.current = false;
+        setLoadingContent(false);
+        setLoadingMore(false);
+      }
+    },
+    [checkStatus, mapToContentItem]
+  );
+
+  // Trigger initial fetch when authenticated or when category / filters / query change
   useEffect(() => {
     if (authStatus.enabled && authStatus.authenticated && authStatus.disclaimerAccepted) {
-      loadContent();
+      setPage(1);
+      setHasMore(true);
+      fetchPage(
+        1,
+        selectedCategory,
+        submittedQuery,
+        { type: typeFilter, language: langFilter, year: yearFilter, sort: sortFilter },
+        false
+      );
     }
-  }, [authStatus.enabled, authStatus.authenticated, authStatus.disclaimerAccepted, loadContent]);
+  }, [
+    authStatus.enabled,
+    authStatus.authenticated,
+    authStatus.disclaimerAccepted,
+    selectedCategory,
+    submittedQuery,
+    typeFilter,
+    langFilter,
+    yearFilter,
+    sortFilter,
+    fetchPage,
+  ]);
+
+  // Infinite Scroll IntersectionObserver
+  useEffect(() => {
+    if (!hasMore || loadingContent || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !loadingMore &&
+          !loadingContent &&
+          !isFetchingRef.current
+        ) {
+          fetchPage(
+            page + 1,
+            selectedCategory,
+            submittedQuery,
+            { type: typeFilter, language: langFilter, year: yearFilter, sort: sortFilter },
+            true
+          );
+        }
+      },
+      { threshold: 0.1, rootMargin: '300px' }
+    );
+
+    const el = observerTarget.current;
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [
+    hasMore,
+    loadingContent,
+    loadingMore,
+    page,
+    selectedCategory,
+    submittedQuery,
+    typeFilter,
+    langFilter,
+    yearFilter,
+    sortFilter,
+    fetchPage,
+  ]);
 
   // Handle Passcode Submit
   const handlePasscodeSubmit = async (e: React.FormEvent) => {
@@ -282,81 +396,47 @@ export default function MidnightPage() {
       authenticated: false,
       disclaimerAccepted: false,
     });
-    setMidnightList([]);
-    setSearchResults(null);
+    setItems([]);
     router.push('/');
   };
 
   // Handle Search
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults(null);
-      return;
-    }
-
-    setSearching(true);
-    try {
-      const res = await fetch(`/api/midnight/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
-      if (res.ok) {
-        const results = await res.json();
-        const mapped = (results || []).map((it: any) => mapToContentItem(it));
-        setSearchResults(mapped);
-      } else {
-        try {
-          const { movieboxApi } = await import('@/lib/api/moviebox-client');
-          const results = await movieboxApi.search(q);
-          const mapped = (results || []).map((it: any) => mapToContentItem(it));
-          setSearchResults(mapped);
-        } catch {
-          setSearchResults([]);
-        }
-      }
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+    setSubmittedQuery(searchQuery.trim());
   };
 
-  // Filter items
-  const activeItems = searchResults || midnightList;
-  const filteredMidnight = useMemo(() => {
-    if (selectedCategory === 'all') return activeItems;
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setSubmittedQuery('');
+  };
 
-    return activeItems.filter((item) => {
-      const titleLower = item.title.toLowerCase();
-      if (selectedCategory === 'movies') {
-        return item.contentType === 'movie';
-      }
-      if (selectedCategory === 'series') {
-        return item.contentType === 'tv';
-      }
-      if (selectedCategory === 'dubbed') {
-        return (
-          titleLower.includes('hindi') ||
-          titleLower.includes('dub') ||
-          titleLower.includes('tamil') ||
-          titleLower.includes('telugu') ||
-          item.availableAudio?.some((aud) => aud.toLowerCase().includes('dub'))
-        );
-      }
-      return true;
-    });
-  }, [activeItems, selectedCategory]);
+  // Active filters count
+  const activeFiltersCount = [
+    typeFilter !== 'all',
+    langFilter !== 'all',
+    yearFilter !== 'all',
+    sortFilter !== 'default',
+  ].filter(Boolean).length;
 
-  // Featured Banner Item
+  const handleResetFilters = () => {
+    setTypeFilter('all');
+    setLangFilter('all');
+    setYearFilter('all');
+    setSortFilter('default');
+  };
+
+  // Featured Item for Hero Banner
   const featuredItem = useMemo(() => {
     return (
-      midnightList.find(
+      items.find(
         (m) =>
           m.posterUrl &&
           !m.posterUrl.includes('neutral') &&
-          m.title.length < 35
-      ) || midnightList[0] || null
+          m.title.length < 40
+      ) || items[0] || null
     );
-  }, [midnightList]);
+  }, [items]);
 
   // ----------------------------------------------------
   // STATE 1: Checking Authentication
@@ -444,15 +524,21 @@ export default function MidnightPage() {
             <ul className="text-[11px] sm:text-xs text-slate-400 space-y-1.5 pl-1">
               <li className="flex items-start gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1" />
-                <span><strong className="text-slate-200">18+ Content Only:</strong> Contains adult themes, romantic thrillers, and uncut cinema.</span>
+                <span>
+                  <strong className="text-slate-200">18+ Content Only:</strong> Contains adult themes, romantic thrillers, and uncut cinema.
+                </span>
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-1" />
-                <span><strong className="text-slate-200">Passcode Protected:</strong> Requires authorized administrative passcode to view.</span>
+                <span>
+                  <strong className="text-slate-200">Passcode Protected:</strong> Requires authorized administrative passcode to view.
+                </span>
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
-                <span><strong className="text-slate-200">Age Verification:</strong> Legal age acknowledgment required before streaming.</span>
+                <span>
+                  <strong className="text-slate-200">Age Verification:</strong> Legal age acknowledgment required before streaming.
+                </span>
               </li>
             </ul>
           </div>
@@ -607,9 +693,9 @@ export default function MidnightPage() {
   // STATE 5: Full Midnight Content (Protected)
   // ----------------------------------------------------
   return (
-    <div className="space-y-8 sm:space-y-12 pb-16">
+    <div className="space-y-8 sm:space-y-12 pb-20">
       {/* Top Banner / Hero with Exit Midnight Button */}
-      {featuredItem && !searchResults && (
+      {featuredItem && !submittedQuery && (
         <div className="relative w-full h-[40vh] sm:h-[50vh] min-h-[320px] max-h-[500px] overflow-hidden">
           <div
             className="absolute inset-0 bg-cover bg-center filter brightness-[0.4] transition-all duration-700"
@@ -641,7 +727,11 @@ export default function MidnightPage() {
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link href={`/${featuredItem.contentType === 'tv' ? 'watch/tv' : 'watch/movie'}/${featuredItem.id}${featuredItem.contentType === 'tv' ? '/s1e1' : ''}`}>
+              <Link
+                href={`/${featuredItem.contentType === 'tv' ? 'watch/tv' : 'watch/movie'}/${featuredItem.id}${
+                  featuredItem.contentType === 'tv' ? '/s1e1' : ''
+                }`}
+              >
                 <Button
                   variant="primary"
                   size="md"
@@ -677,27 +767,57 @@ export default function MidnightPage() {
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Late-night cinema, adult thrillers, and multi-audio productions.
+              Late-night cinema, adult thrillers, uncut series, and multi-audio productions.
+              {totalAvailable !== null && (
+                <span className="text-indigo-400 font-semibold ml-1.5">
+                  ({totalAvailable} titles available)
+                </span>
+              )}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Search Form */}
-            <form onSubmit={handleSearch} className="relative w-full sm:w-64">
+            <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
               <IconMagnifer className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  if (!e.target.value.trim() && searchResults !== null) {
-                    setSearchResults(null);
-                  }
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search Midnight..."
-                className="w-full h-10 pl-10 pr-4 text-xs rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder-slate-400 outline-none transition-all"
+                className="w-full h-10 pl-10 pr-9 text-xs rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder-slate-400 outline-none transition-all"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+                >
+                  <IconClose className="w-3.5 h-3.5" />
+                </button>
+              )}
             </form>
+
+            {/* Filter Toggle Button */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 text-xs border ${
+                activeFiltersCount > 0
+                  ? 'border-indigo-500 text-indigo-300 bg-indigo-500/10'
+                  : 'border-white/10 text-slate-300 hover:text-white'
+              }`}
+            >
+              <IconFilter className="w-3.5 h-3.5 text-indigo-400" />
+              Filters
+              {activeFiltersCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-600 text-white">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </Button>
 
             {/* Exit Midnight Action */}
             <Button
@@ -713,17 +833,16 @@ export default function MidnightPage() {
           </div>
         </div>
 
-        {/* Category Tabs */}
+        {/* Category Tabs (8 categories) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
           {midnightCategories.map((cat) => (
             <button
               key={cat.value}
               onClick={() => {
                 setSelectedCategory(cat.value);
-                setSearchResults(null);
               }}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${
-                selectedCategory === cat.value && searchResults === null
+                selectedCategory === cat.value
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30'
                   : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
               }`}
@@ -733,7 +852,121 @@ export default function MidnightPage() {
           ))}
         </div>
 
-        {/* Content Loading State */}
+        {/* Filters Bar (Collapsible) */}
+        {showFilters && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-white">
+                <IconFilter className="w-4 h-4 text-indigo-400" />
+                <span>Filter & Refine Midnight Catalog</span>
+              </div>
+              {activeFiltersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                >
+                  Reset all filters
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Type Filter */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconClapperboardPlay className="w-3 h-3 text-indigo-400" />
+                  Format / Type
+                </label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="all">All Types</option>
+                  <option value="movie">Movies</option>
+                  <option value="tv">Series / Web Shows</option>
+                  <option value="anime">Anime / Hentai</option>
+                </select>
+              </div>
+
+              {/* Language Filter */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconBolt className="w-3 h-3 text-indigo-400" />
+                  Language
+                </label>
+                <select
+                  value={langFilter}
+                  onChange={(e) => setLangFilter(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="all">All Languages</option>
+                  <option value="hindi">Hindi / Regional Dubs</option>
+                  <option value="english">English / International</option>
+                  <option value="japanese">Japanese / Asian</option>
+                </select>
+              </div>
+
+              {/* Year Filter */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconFlame className="w-3 h-3 text-indigo-400" />
+                  Release Year
+                </label>
+                <select
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="all">All Years</option>
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                  <option value="2023">2023</option>
+                  <option value="older">2022 & Older</option>
+                </select>
+              </div>
+
+              {/* Sort Filter */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconSort className="w-3 h-3 text-indigo-400" />
+                  Sort By
+                </label>
+                <select
+                  value={sortFilter}
+                  onChange={(e) => setSortFilter(e.target.value)}
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="default">Default / Curated</option>
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="title">Title (A - Z)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Search Badge */}
+        {submittedQuery && (
+          <div className="flex items-center gap-2 text-xs text-slate-300 bg-indigo-950/30 border border-indigo-500/20 px-3.5 py-2 rounded-xl">
+            <span>
+              Searching for: <strong className="text-white">&quot;{submittedQuery}&quot;</strong>
+            </span>
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="text-xs text-indigo-400 hover:text-indigo-300 ml-auto font-semibold flex items-center gap-1"
+            >
+              <IconClose className="w-3 h-3" />
+              Clear Search
+            </button>
+          </div>
+        )}
+
+        {/* Initial Content Loading State */}
         {loadingContent && (
           <div className="py-24 flex flex-col items-center justify-center space-y-3">
             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -744,11 +977,61 @@ export default function MidnightPage() {
         {/* Catalog Grid */}
         {!loadingContent && (
           <>
-            {filteredMidnight.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-6">
-                {filteredMidnight.map((item) => (
-                  <ContentCard key={item.id} content={item} />
-                ))}
+            {items.length > 0 ? (
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-6">
+                  {items.map((item) => (
+                    <ContentCard key={item.id} content={item} />
+                  ))}
+                </div>
+
+                {/* Loading More Spinner */}
+                {loadingMore && (
+                  <div className="py-8 flex flex-col items-center justify-center space-y-2.5">
+                    <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-slate-400 text-xs font-medium">Loading more titles...</p>
+                  </div>
+                )}
+
+                {/* Fallback Load More Button & Sentinel */}
+                {hasMore && !loadingMore && (
+                  <div className="flex flex-col items-center justify-center py-6 space-y-3">
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        fetchPage(
+                          page + 1,
+                          selectedCategory,
+                          submittedQuery,
+                          { type: typeFilter, language: langFilter, year: yearFilter, sort: sortFilter },
+                          true
+                        )
+                      }
+                      className="px-8 text-xs font-bold border border-white/10 hover:border-indigo-500/50 shadow-lg"
+                    >
+                      Load More Titles
+                    </Button>
+                    <span className="text-[11px] text-slate-500">
+                      or scroll down to load automatically
+                    </span>
+                  </div>
+                )}
+
+                {/* Infinite Scroll Sentinel */}
+                <div ref={observerTarget} className="h-6 w-full pointer-events-none" />
+
+                {/* End of Content Notice */}
+                {!hasMore && items.length > 0 && (
+                  <div className="py-10 text-center space-y-2 border-t border-white/5">
+                    <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400">
+                      <IconMoonStars className="w-4 h-4" />
+                    </div>
+                    <p className="text-xs text-slate-400 font-medium">
+                      You have reached the end of the Midnight catalog in this category.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : contentError ? (
               <div className="py-20 text-center space-y-3 bg-red-950/20 rounded-2xl border border-red-500/20">
@@ -759,7 +1042,15 @@ export default function MidnightPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => loadContent()}
+                    onClick={() =>
+                      fetchPage(
+                        1,
+                        selectedCategory,
+                        submittedQuery,
+                        { type: typeFilter, language: langFilter, year: yearFilter, sort: sortFilter },
+                        false
+                      )
+                    }
                     className="text-xs font-semibold"
                   >
                     <IconRefresh className="w-3.5 h-3.5 mr-1.5" />
@@ -772,22 +1063,23 @@ export default function MidnightPage() {
                 <IconMoonStars className="w-10 h-10 text-slate-500 mx-auto" />
                 <h3 className="text-sm font-bold text-white">No titles available</h3>
                 <p className="text-xs text-slate-400">
-                  {searchResults !== null
-                    ? `No results found for "${searchQuery}". Try another keyword.`
-                    : 'No Midnight titles found in this category.'}
+                  {submittedQuery
+                    ? `No results found for "${submittedQuery}". Try another keyword or reset filters.`
+                    : 'No Midnight titles found matching the selected category and filters.'}
                 </p>
-                {searchResults !== null && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSearchResults(null);
-                      setSearchQuery('');
-                    }}
-                    className="text-xs"
-                  >
-                    Clear Search
-                  </Button>
+                {(submittedQuery || activeFiltersCount > 0) && (
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    {submittedQuery && (
+                      <Button variant="outline" size="sm" onClick={handleClearSearch} className="text-xs">
+                        Clear Search
+                      </Button>
+                    )}
+                    {activeFiltersCount > 0 && (
+                      <Button variant="secondary" size="sm" onClick={handleResetFilters} className="text-xs">
+                        Reset Filters
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
